@@ -1,69 +1,312 @@
-const orders = [
-  { id: 1, table: 'Mesa 12', items: 3, total: 45.50, status: 'pending', time: '5 min' },
-  { id: 2, table: 'Mesa 4', items: 2, total: 32.00, status: 'preparing', time: '12 min' },
-  { id: 3, table: 'Terraza 8', items: 5, total: 78.30, status: 'ready', time: '18 min' },
-  { id: 4, table: 'Mesa 15', items: 2, total: 28.90, status: 'delivered', time: '25 min' },
-];
+import Link from "next/link";
 
-const statusConfig = {
-  pending: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800' },
-  preparing: { label: 'Preparando', color: 'bg-blue-100 text-blue-800' },
-  ready: { label: 'Listo', color: 'bg-green-100 text-green-800' },
-  delivered: { label: 'Entregado', color: 'bg-gray-100 text-gray-800' },
+type OrderStatus =
+  | "pending"
+  | "accepted"
+  | "preparing"
+  | "ready"
+  | "delivering"
+  | "delivered"
+  | "cancelled";
+
+interface DashboardOrder {
+  id: number;
+  orderNumber: string;
+  tableId: number;
+  tableName: string | null;
+  itemCount: number;
+  total: number;
+  status: OrderStatus | null;
+  createdAt: string;
+}
+
+interface RecentOrdersProps {
+  orders: DashboardOrder[];
+  currency: string;
+}
+
+const STATUS_CONFIG: Record<
+  OrderStatus,
+  {
+    label: string;
+    className: string;
+  }
+> = {
+  pending: {
+    label: "Pendiente",
+    className:
+      "bg-amber-50 text-amber-700",
+  },
+
+  accepted: {
+    label: "Aceptado",
+    className:
+      "bg-sky-50 text-sky-700",
+  },
+
+  preparing: {
+    label: "Preparando",
+    className:
+      "bg-blue-50 text-blue-700",
+  },
+
+  ready: {
+    label: "Listo",
+    className:
+      "bg-emerald-50 text-emerald-700",
+  },
+
+  delivering: {
+    label: "Entregando",
+    className:
+      "bg-violet-50 text-violet-700",
+  },
+
+  delivered: {
+    label: "Entregado",
+    className:
+      "bg-slate-100 text-slate-700",
+  },
+
+  cancelled: {
+    label: "Cancelado",
+    className:
+      "bg-red-50 text-red-700",
+  },
 };
 
-export default function RecentOrders() {
+function formatMoney(
+  value: number,
+  currency: string
+) {
+  try {
+    return new Intl.NumberFormat(
+      "es-ES",
+      {
+        style:
+          "currency",
+
+        currency,
+      }
+    ).format(
+      value
+    );
+  } catch {
+    return `${value.toFixed(
+      2
+    )} ${currency}`;
+  }
+}
+
+function formatRelativeTime(
+  value: string
+) {
+  const date =
+    new Date(
+      value
+    );
+
+  const timestamp =
+    date.getTime();
+
+  if (
+    !Number.isFinite(
+      timestamp
+    )
+  ) {
+    return "fecha desconocida";
+  }
+
+  const difference =
+    Date.now() -
+    timestamp;
+
+  const minutes =
+    Math.max(
+      0,
+      Math.floor(
+        difference /
+          60000
+      )
+    );
+
+  if (
+    minutes <
+    1
+  ) {
+    return "ahora";
+  }
+
+  if (
+    minutes <
+    60
+  ) {
+    return `hace ${minutes} min`;
+  }
+
+  const hours =
+    Math.floor(
+      minutes /
+        60
+    );
+
+  if (
+    hours <
+    24
+  ) {
+    return `hace ${hours} h`;
+  }
+
+  return new Intl.DateTimeFormat(
+    "es-ES",
+    {
+      day:
+        "2-digit",
+
+      month:
+        "2-digit",
+
+      year:
+        "2-digit",
+
+      hour:
+        "2-digit",
+
+      minute:
+        "2-digit",
+    }
+  ).format(
+    date
+  );
+}
+
+export default function RecentOrders({
+  orders,
+  currency,
+}: RecentOrdersProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">
-          Pedidos recientes
-        </h3>
-        <a 
-          href="/admin/orders" 
-          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
+      <div className="mb-5 flex items-center justify-between">
+
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">
+            Pedidos recientes
+          </h3>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Últimos pedidos registrados.
+          </p>
+        </div>
+
+        <Link
+          href="/admin/orders"
+          className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
         >
-          Ver todos →
-        </a>
+          Ver todos
+        </Link>
+
       </div>
-      
-      <div className="space-y-3">
-        {orders.map((order) => (
-          <div
-            key={order.id}
-            className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                <span className="text-indigo-600 font-semibold text-sm">
-                  #{order.id}
-                </span>
-              </div>
-              
-              <div>
-                <p className="font-medium text-gray-900">{order.table}</p>
-                <p className="text-sm text-gray-500">
-                  {order.items} productos • Hace {order.time}
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <span className="font-semibold text-gray-900">
-                €{order.total.toFixed(2)}
-              </span>
-              
-              <span
-                className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  statusConfig[order.status as keyof typeof statusConfig].color
-                }`}
-              >
-                {statusConfig[order.status as keyof typeof statusConfig].label}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+
+      {orders.length ===
+      0 ? (
+        <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          Todavía no hay pedidos registrados.
+        </div>
+      ) : (
+        <div className="space-y-3">
+
+          {orders.map(
+            (
+              order
+            ) => {
+              const status =
+                order.status ??
+                "pending";
+
+              const config =
+                STATUS_CONFIG[
+                  status
+                ];
+
+              return (
+                <div
+                  key={
+                    order.id
+                  }
+                  className="flex flex-col gap-4 rounded-xl bg-slate-50 p-4 transition hover:bg-slate-100 sm:flex-row sm:items-center sm:justify-between"
+                >
+
+                  <div className="flex min-w-0 items-center gap-4">
+
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-sm font-semibold text-indigo-600">
+                      #
+                      {
+                        order.id
+                      }
+                    </div>
+
+                    <div className="min-w-0">
+
+                      <p className="truncate font-medium text-slate-900">
+                        {
+                          order.tableName ||
+                          `Mesa ${order.tableId}`
+                        }
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        {
+                          order.itemCount
+                        }
+                        {" "}
+                        {
+                          order.itemCount ===
+                          1
+                            ? "producto"
+                            : "productos"
+                        }
+                        {" · "}
+                        {
+                          formatRelativeTime(
+                            order.createdAt
+                          )
+                        }
+                      </p>
+
+                    </div>
+
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-4">
+
+                    <span className="font-semibold text-slate-900">
+                      {
+                        formatMoney(
+                          order.total,
+                          currency
+                        )
+                      }
+                    </span>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-medium ${config.className}`}
+                    >
+                      {
+                        config.label
+                      }
+                    </span>
+
+                  </div>
+
+                </div>
+              );
+            }
+          )}
+
+        </div>
+      )}
+
     </div>
   );
 }

@@ -1,126 +1,212 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { orders, orderItems } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { NextRequest } from "next/server";
 
-// GET - Obtener todos los pedidos
-export async function GET(request: NextRequest) {
+import {
+  ApiAuthError,
+  authenticateRequest,
+} from "@/auth/api-auth";
+
+import {
+  OrderSchema,
+} from "@/validations/order.validation";
+
+import {
+  OrderService,
+} from "@/services/order.service";
+
+import {
+  Logger,
+} from "@/services/logger.service";
+
+import {
+  ApiResponse,
+} from "@/lib/api/ApiResponse";
+
+function handleAuthError(
+  error: unknown
+) {
+  if (
+    !(error instanceof ApiAuthError)
+  ) {
+    return null;
+  }
+
+  switch (error.message) {
+    case "AUTH_HEADER_MISSING":
+      return ApiResponse.error(
+        "Authentication required",
+        401
+      );
+
+    case "AUTH_HEADER_INVALID":
+      return ApiResponse.error(
+        "Invalid authorization header",
+        401
+      );
+
+    case "TOKEN_EXPIRED":
+      return ApiResponse.error(
+        "Authentication token expired",
+        401
+      );
+
+    case "TOKEN_INVALID":
+      return ApiResponse.error(
+        "Invalid authentication token",
+        401
+      );
+
+    default:
+      return ApiResponse.error(
+        "Authentication failed",
+        401
+      );
+  }
+}
+
+/*
+ * ==========================================================
+ * GET
+ * Panel administrativo.
+ * Requiere JWT y devuelve únicamente pedidos del tenant.
+ * ==========================================================
+ */
+
+export async function GET(
+  request: NextRequest
+) {
   try {
-    const { searchParams } = new URL(request.url);
-    const establishmentId = searchParams.get('establishmentId');
-    const tableId = searchParams.get('tableId');
-    const status = searchParams.get('status');
-    
-    let query = db
-      .select({
-        order: orders,
-        table: tables,
-        items: orderItems,
-      })
-      .from(orders)
-      .leftJoin(tables, eq(orders.tableId, tables.id))
-      .leftJoin(orderItems, eq(orders.id, orderItems.orderId))
-      .orderBy(desc(orders.createdAt));
-    
-    if (establishmentId) {
-      query = query.where(eq(orders.establishmentId, parseInt(establishmentId))) as any;
-    }
-    
-    if (tableId) {
-      query = query.where(eq(orders.tableId, parseInt(tableId))) as any;
-    }
-    
-    if (status) {
-      query = query.where(eq(orders.status, status)) as any;
-    }
-    
-    const result = await query;
-    
-    return NextResponse.json({
-      success: true,
-      data: result,
-    });
+    const authUser =
+      await authenticateRequest(
+        request
+      );
+
+    const result =
+      await OrderService
+        .getAllForEstablishment(
+          authUser.establishmentId
+        );
+
+    return ApiResponse.success(
+      result,
+      "Pedidos obtenidos correctamente."
+    );
   } catch (error) {
-    console.error('Error fetching orders:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al obtener pedidos' },
-      { status: 500 }
+    Logger.error(
+      "Error obteniendo pedidos.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(
+        error
+      );
+
+    if (authResponse) {
+      return authResponse;
+    }
+
+    return ApiResponse.error(
+      "Error obteniendo pedidos.",
+      500
     );
   }
 }
 
-// POST - Crear nuevo pedido
-export async function POST(request: NextRequest) {
+/*
+ * ==========================================================
+ * POST
+ * Flujo público QR.
+ *
+ * NO requiere JWT administrativo.
+ * La autoridad del tenant se valida mediante la sesión QR
+ * dentro de OrderService.create().
+ * ==========================================================
+ */
+
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const body = await request.json();
-    
-    const newOrder = await db
-      .insert(orders)
-      .values({
-        establishmentId: body.establishmentId,
-        tableId: body.tableId,
-        clientId: body.clientId || null,
-        status: 'pending',
-        subtotal: body.subtotal,
-        tax: body.tax || 0,
-        total: body.total,
-        notes: body.notes || '',
-      })
-      .returning();
-    
-    // Insertar items del pedido
-    if (body.items && body.items.length > 0) {
-      await db.insert(orderItems).values(
-        body.items.map((item: any) => ({
-          orderId: newOrder[0].id,
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          modifications: item.modifications || [],
-          observations: item.observations || '',
-        }))
+    const body =
+      OrderSchema.parse(
+        await request.json()
+      );
+
+    const order =
+      await OrderService.create(
+        body
+      );
+
+    return ApiResponse.success(
+      order,
+      "Pedido creado correctamente.",
+      201
+    );
+  } catch (error: any) {
+    Logger.error(
+      "Error creando pedido.",
+      error
+    );
+
+    if (
+      error?.name ===
+      "ZodError"
+    ) {
+      return ApiResponse.error(
+        "Datos inválidos.",
+        400,
+        error.issues
       );
     }
-    
-    return NextResponse.json({
-      success: true,
-      data: newOrder[0],
-    });
-  } catch (error) {
-    console.error('Error creating order:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al crear pedido' },
-      { status: 500 }
-    );
-  }
-}
 
-// PUT - Actualizar estado del pedido
-export async function PUT(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    const body = await request.json();
-    
-    const updated = await db
-      .update(orders)
-      .set({
-        status: body.status,
-        estimatedTime: body.estimatedTime,
-        updatedAt: new Date(),
-      })
-      .where(eq(orders.id, parseInt(id)))
-      .returning();
-    
-    return NextResponse.json({
-      success: true,
-      data: updated[0],
-    });
-  } catch (error) {
-    console.error('Error updating order:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al actualizar pedido' },
-      { status: 500 }
+    const clientErrors = [
+      "La sesión no existe.",
+      "La sesión no está activa.",
+      "La mesa no corresponde a la sesión.",
+      "El establecimiento no corresponde a la sesión.",
+    ];
+
+    if (
+      error instanceof Error &&
+      clientErrors.includes(
+        error.message
+      )
+    ) {
+      return ApiResponse.error(
+        error.message,
+        400
+      );
+    }
+
+    if (
+      error instanceof Error &&
+      (
+        error.message.includes(
+          "Producto"
+        ) ||
+        error.message.includes(
+          "producto"
+        ) ||
+        error.message.includes(
+          "Modificador"
+        ) ||
+        error.message.includes(
+          "modificador"
+        ) ||
+        error.message.includes(
+          "Stock insuficiente"
+        )
+      )
+    ) {
+      return ApiResponse.error(
+        error.message,
+        400
+      );
+    }
+
+    return ApiResponse.error(
+      "No se pudo crear el pedido.",
+      500
     );
   }
 }

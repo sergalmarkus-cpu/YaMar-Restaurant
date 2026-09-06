@@ -1,62 +1,186 @@
-const products = [
-  { id: 1, name: 'Paella Valenciana', sales: 45, revenue: 1350, trend: 12 },
-  { id: 2, name: 'Hamburguesa Premium', sales: 38, revenue: 532, trend: 8 },
-  { id: 3, name: 'Ensalada César', sales: 32, revenue: 384, trend: -3 },
-  { id: 4, name: 'Mojito', sales: 56, revenue: 392, trend: 15 },
-  { id: 5, name: 'Tarta de queso', sales: 28, revenue: 168, trend: 5 },
-];
+import Link from "next/link";
 
-export default function TopProducts() {
+interface TranslatedText {
+  es?: string;
+  en?: string;
+  de?: string;
+  fr?: string;
+  it?: string;
+  pt?: string;
+}
+
+interface DashboardProduct {
+  productId: number;
+  name: unknown;
+  quantity: number;
+  revenue: number;
+}
+
+interface Props {
+  products: DashboardProduct[];
+  currency: string;
+}
+
+function getProductName(
+  value: unknown
+) {
+  if (
+    typeof value ===
+    "string"
+  ) {
+    return value;
+  }
+
+  if (
+    value &&
+    typeof value ===
+    "object"
+  ) {
+    const translated =
+      value as
+        TranslatedText;
+
+    return (
+      translated.es ||
+      translated.en ||
+      translated.fr ||
+      translated.de ||
+      translated.it ||
+      translated.pt ||
+      "Producto"
+    );
+  }
+
+  return "Producto";
+}
+
+function formatMoney(
+  value: number,
+  currency: string
+) {
+  try {
+    return new Intl.NumberFormat(
+      "es-ES",
+      {
+        style:
+          "currency",
+
+        currency,
+      }
+    ).format(
+      value
+    );
+  } catch {
+    return `${value.toFixed(
+      2
+    )} ${currency}`;
+  }
+}
+
+export default function TopProducts({
+  products,
+  currency,
+}: Props) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">
-          Productos más vendidos
-        </h3>
-        <a 
-          href="/admin/analytics-products" 
-          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
+      <div className="mb-5 flex items-center justify-between">
+
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900">
+            Productos más vendidos
+          </h3>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Ranking de los últimos 7 días.
+          </p>
+        </div>
+
+        <Link
+          href="/admin/products"
+          className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
         >
-          Ver análisis →
-        </a>
+          Ver productos
+        </Link>
+
       </div>
-      
-      <div className="space-y-3">
-        {products.map((product, index) => (
-          <div
-            key={product.id}
-            className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center">
-                <span className="text-indigo-600 font-bold text-sm">
-                  {index + 1}
-                </span>
-              </div>
-              
-              <div>
-                <p className="font-medium text-gray-900">{product.name}</p>
-                <p className="text-xs text-gray-500">
-                  {product.sales} unidades vendidas
-                </p>
-              </div>
-            </div>
-            
-            <div className="text-right">
-              <p className="font-semibold text-gray-900">
-                €{product.revenue}
-              </p>
-              <p
-                className={`text-xs font-medium ${
-                  product.trend > 0 ? 'text-green-600' : 'text-red-600'
-                }`}
+
+      {products.length ===
+      0 ? (
+        <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+          Todavía no hay ventas suficientes para generar el ranking.
+        </div>
+      ) : (
+        <div className="space-y-3">
+
+          {products.map(
+            (
+              product,
+              index
+            ) => (
+              <div
+                key={
+                  product.productId
+                }
+                className="flex items-center justify-between rounded-xl p-3 transition hover:bg-slate-50"
               >
-                {product.trend > 0 ? '↑' : '↓'} {Math.abs(product.trend)}%
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
+
+                <div className="flex min-w-0 items-center gap-3">
+
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-600">
+                    {
+                      index +
+                      1
+                    }
+                  </div>
+
+                  <div className="min-w-0">
+
+                    <p className="truncate font-medium text-slate-900">
+                      {
+                        getProductName(
+                          product.name
+                        )
+                      }
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-500">
+                      {
+                        product.quantity
+                      }
+                      {" "}
+                      {
+                        product.quantity ===
+                        1
+                          ? "unidad vendida"
+                          : "unidades vendidas"
+                      }
+                    </p>
+
+                  </div>
+
+                </div>
+
+                <div className="ml-4 shrink-0 text-right">
+
+                  <p className="font-semibold text-slate-900">
+                    {
+                      formatMoney(
+                        product.revenue,
+                        currency
+                      )
+                    }
+                  </p>
+
+                </div>
+
+              </div>
+            )
+          )}
+
+        </div>
+      )}
+
     </div>
   );
 }

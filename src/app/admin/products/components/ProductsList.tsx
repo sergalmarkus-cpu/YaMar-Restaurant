@@ -1,261 +1,563 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { ShoppingBag, Plus, Edit2, Trash2, Tag } from 'lucide-react';
+import {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-interface Category {
+import {
+  Plus,
+} from "lucide-react";
+
+import {
+  toast,
+} from "sonner";
+
+import {
+  adminFetch,
+} from "@/lib/api/admin-fetch";
+
+import StatsCards from "./StatsCards";
+import ProductsGrid from "./ProductsGrid";
+import NewProductModal from "./NewProductModal";
+import EditProductModal from "./EditProductModal";
+
+import type {
+  Product,
+} from "@/types/product";
+
+interface ApiCategory {
   id: number;
   name:
     | string
-    | {
-        es?: string;
-        en?: string;
-        de?: string;
-      };
+    | Record<
+        string,
+        string
+      >;
 }
 
-interface ProductItem {
+interface ApiProduct {
   id: number;
+  establishmentId: number;
+  categoryId: number;
 
   name:
     | string
-    | {
-        es?: string;
-        en?: string;
-        de?: string;
-      };
+    | Record<
+        string,
+        string
+      >;
 
-  categoryId: number;
+  description:
+    | string
+    | Record<
+        string,
+        string
+      >
+    | null;
 
-  category?: Category;
+  price:
+    string;
 
-  price: number;
+  image:
+    string | null;
 
-  available: boolean;
+  available:
+    boolean;
 
-  image: string | null;
+  featured:
+    boolean;
+
+  dailySpecial:
+    boolean;
+
+  active:
+    boolean;
+}
+
+function getLocalizedText(
+  value:
+    | string
+    | Record<
+        string,
+        string
+      >
+    | null
+    | undefined
+) {
+  if (
+    typeof value ===
+    "string"
+  ) {
+    return value;
+  }
+
+  if (!value) {
+    return "";
+  }
+
+  return (
+    value.es ||
+    value.en ||
+    Object.values(
+      value
+    )[0] ||
+    ""
+  );
 }
 
 export default function ProductsList() {
-  const [products, setProducts] = useState<ProductItem[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [
+    products,
+    setProducts,
+  ] =
+    useState<
+      Product[]
+    >([]);
+
+  const [
+    loading,
+    setLoading,
+  ] =
+    useState(
+      true
+    );
+
+  const [
+    newModalOpen,
+    setNewModalOpen,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    editingProduct,
+    setEditingProduct,
+  ] =
+    useState<
+      Product | null
+    >(null);
 
   useEffect(() => {
-    fetchData();
+    void fetchProducts();
   }, []);
 
-  const fetchData = async () => {
-    try {
-      // Cargar categorías
-      const catRes = await fetch('/api/categories');
-      const catData = await catRes.json();
-      if (catData.success) {
-  setCategories(
-    catData.data.map((c: any) => ({
-      id: c.id,
-      name: c.name.es,
-    }))
-  );
-}
+  async function fetchProducts() {
+    setLoading(
+      true
+    );
 
-      // Cargar productos
-      const prodRes = await fetch('/api/products');
-      const prodData = await prodRes.json();
-      
-      if (prodData.success && Array.isArray(prodData.data)) {
-  setProducts(
-    prodData.data.map((item: any) => ({
-      id: item.product.id,
-      name: item.product.name.es,
-      categoryId: item.product.categoryId,
-      category: {
-        id: item.category.id,
-        name: item.category.name.es,
-      },
-      price: parseFloat(item.product.price),
-      available: item.product.available,
-      imageUrl: item.product.image,
-    }))
-  );
-}
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteProduct = async (id: number) => {
-    if (!confirm('¿Estás seguro de eliminar este producto?')) return;
-    
     try {
-      const response = await fetch(`/api/products?id=${id}`, {
-        method: 'DELETE',
-      });
-      
-      if (response.ok) {
-        fetchData();
+      /*
+       * Categories y Products están protegidos.
+       *
+       * adminFetch gestiona automáticamente:
+       * - Authorization
+       * - access token caducado
+       * - refresh token
+       * - repetición de la petición
+       */
+      const [
+        categoriesRes,
+        productsRes,
+      ] =
+        await Promise.all([
+          adminFetch(
+            "/api/categories"
+          ),
+
+          adminFetch(
+            "/api/products"
+          ),
+        ]);
+
+      const [
+        categoriesJson,
+        productsJson,
+      ] =
+        await Promise.all([
+          categoriesRes.json(),
+          productsRes.json(),
+        ]);
+
+      if (
+        !categoriesRes.ok ||
+        !categoriesJson.success
+      ) {
+        toast.error(
+          categoriesJson.error ||
+            categoriesJson.message ||
+            "No se pudieron cargar las categorías."
+        );
+
+        return;
       }
-    } catch (error) {
-      console.error('Error deleting product:', error);
+
+      if (
+        !productsRes.ok ||
+        !productsJson.success
+      ) {
+        toast.error(
+          productsJson.error ||
+            productsJson.message ||
+            "No se pudieron cargar los productos."
+        );
+
+        return;
+      }
+
+      const categories:
+        ApiCategory[] =
+          categoriesJson.data;
+
+      const apiProducts:
+        ApiProduct[] =
+          productsJson.data;
+
+      const formatted:
+        Product[] =
+          apiProducts.map(
+            (
+              product
+            ) => {
+              const category =
+                categories.find(
+                  (
+                    item
+                  ) =>
+                    item.id ===
+                    product.categoryId
+                );
+
+              return {
+                id:
+                  product.id,
+
+                name:
+                  getLocalizedText(
+                    product.name
+                  ),
+
+                description:
+                  getLocalizedText(
+                    product.description
+                  ),
+
+                categoryId:
+                  product.categoryId,
+
+                category:
+                  category
+                    ? getLocalizedText(
+                        category.name
+                      )
+                    : "Sin categoría",
+
+                price:
+                  Number(
+                    product.price
+                  ),
+
+                image:
+                  product.image,
+
+                available:
+                  product.available,
+
+                featured:
+                  product.featured,
+
+                dailySpecial:
+                  product.dailySpecial,
+
+                active:
+                  product.active,
+              };
+            }
+          );
+
+      setProducts(
+        formatted
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        "Error loading products:",
+        error
+      );
+
+      toast.error(
+        "Error cargando productos."
+      );
+    } finally {
+      setLoading(
+        false
+      );
     }
-  };
+  }
 
-  const getCategoryName = (categoryId: number) => {
-  const cat = categories.find(c => c.id === categoryId);
+  async function deleteProduct(
+    product:
+      Product
+  ) {
+    if (
+      !window.confirm(
+        `¿Eliminar "${product.name}"?`
+      )
+    ) {
+      return;
+    }
 
-  return cat ? cat.name : "Sin categoría";
-};
+    try {
+      const res =
+        await adminFetch(
+          `/api/products/${product.id}`,
+          {
+            method:
+              "DELETE",
+          }
+        );
 
-  if (loading) {
+      const json =
+        await res.json();
+
+      if (
+        !res.ok ||
+        !json.success
+      ) {
+        toast.error(
+          json.error ||
+            json.message ||
+            "No se pudo eliminar el producto."
+        );
+
+        return;
+      }
+
+      toast.success(
+        "Producto eliminado."
+      );
+
+      await fetchProducts();
+    } catch (
+      error
+    ) {
+      console.error(
+        "Error deleting product:",
+        error
+      );
+
+      toast.error(
+        "No se pudo eliminar el producto."
+      );
+    }
+  }
+
+  async function toggleProduct(
+    product:
+      Product
+  ) {
+    try {
+      const res =
+        await adminFetch(
+          `/api/products/${product.id}`,
+          {
+            method:
+              "PUT",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                available:
+                  !product.available,
+              }),
+          }
+        );
+
+      const json =
+        await res.json();
+
+      if (
+        !res.ok ||
+        !json.success
+      ) {
+        toast.error(
+          json.error ||
+            json.message ||
+            "No se pudo actualizar el producto."
+        );
+
+        return;
+      }
+
+      toast.success(
+        product.available
+          ? "Producto marcado como no disponible."
+          : "Producto marcado como disponible."
+      );
+
+      await fetchProducts();
+    } catch (
+      error
+    ) {
+      console.error(
+        "Error updating product:",
+        error
+      );
+
+      toast.error(
+        "No se pudo actualizar el producto."
+      );
+    }
+  }
+
+  const stats =
+    useMemo(
+      () => ({
+        total:
+          products.length,
+
+        available:
+          products.filter(
+            (
+              product
+            ) =>
+              product.available
+          ).length,
+
+        unavailable:
+          products.filter(
+            (
+              product
+            ) =>
+              !product.available
+          ).length,
+
+        featured:
+          products.filter(
+            (
+              product
+            ) =>
+              product.featured
+          ).length,
+      }),
+      [
+        products,
+      ]
+    );
+
+  if (
+    loading
+  ) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Productos</h2>
-          <p className="text-gray-600 mt-1">
-            Gestiona todos los productos disponibles
-          </p>
-        </div>
-        
-        <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-          <Plus size={20} />
-          Nuevo Producto
-        </button>
-      </div>
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">
+              Productos
+            </h1>
 
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-        <div className="flex items-center gap-4 flex-wrap">
-          <span className="text-sm font-medium text-gray-700">Filtrar por categoría:</span>
-          <select className="px-3 py-2 border border-gray-300 rounded-lg text-sm">
-            <option value="">Todas las categorías</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-  		{typeof cat.name === "string"
-    		  ? cat.name
-    		  : cat.name.es ?? cat.name.en ?? cat.name.de}
-	       </option>
-            ))}
-          </select>
-          
-          <button className="ml-auto text-sm text-indigo-600 hover:text-indigo-700 font-medium">
-            + Agregar Filtro →
+            <p className="mt-1 text-gray-500">
+              Gestiona todos los productos del restaurante.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              setNewModalOpen(
+                true
+              )
+            }
+            className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-white transition hover:bg-indigo-700"
+          >
+            <Plus
+              size={
+                20
+              }
+            />
+
+            Nuevo producto
           </button>
         </div>
+
+        <StatsCards
+          total={
+            stats.total
+          }
+          available={
+            stats.available
+          }
+          unavailable={
+            stats.unavailable
+          }
+          featured={
+            stats.featured
+          }
+        />
+
+        <ProductsGrid
+          products={
+            products
+          }
+          onEdit={
+            setEditingProduct
+          }
+          onDelete={
+            deleteProduct
+          }
+          onToggle={
+            toggleProduct
+          }
+        />
       </div>
 
-      {/* Products Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Producto
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Categoría
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Precio
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Estado
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Acciones
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {products.length > 0 ? (
-              products.map((product) => (
-                <tr key={product.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
-                        <ShoppingBag size={20} className="text-indigo-600" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-gray-900">
-			{
-  			   typeof product.name === "string"
-   			   ? product.name
-    			   : product.name?.es ??
-      			   product.name?.en ??
-     			   product.name?.de ??
-    			   "Sin nombre"
-}
-</p>
-                        <p className="text-sm text-gray-500">ID: #{product.id}</p>
-                      </div>
-                    </div>
-                  </td>
-                  
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                      <Tag size={12} />
-                      {getCategoryName(product.categoryId)}
-                    </span>
-                  </td>
-                  
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="font-semibold text-gray-900">
-                      €{(product.price ?? 0).toFixed(2)}
-                    </span>
-                  </td>
-                  
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        product.available
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {product.available ? 'Disponible' : 'Agotado'}
-                    </span>
-                  </td>
-                  
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button className="text-gray-600 hover:text-indigo-600 mr-3">
-                      <Edit2 size={18} />
-                    </button>
-                    
-                    <button
-                      onClick={() => deleteProduct(product.id)}
-                      className="text-gray-600 hover:text-red-600"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={5} className="text-center py-12">
-                  <ShoppingBag size={48} className="mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">
-                    No hay productos creados
-                  </h3>
-                  <p className="text-gray-600 mb-6">
-                    Comienza añadiendo tu primer producto
-                  </p>
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <NewProductModal
+        open={
+          newModalOpen
+        }
+        onClose={() =>
+          setNewModalOpen(
+            false
+          )
+        }
+        onCreated={
+          fetchProducts
+        }
+      />
+
+      <EditProductModal
+        open={
+          editingProduct !==
+          null
+        }
+        product={
+          editingProduct
+        }
+        onClose={() =>
+          setEditingProduct(
+            null
+          )
+        }
+        onUpdated={
+          fetchProducts
+        }
+      />
+    </>
   );
 }

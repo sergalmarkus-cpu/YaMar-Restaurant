@@ -1,60 +1,166 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { establishments } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import {
+  NextRequest,
+} from "next/server";
 
-// GET - Obtener todos los establecimientos
-export async function GET() {
+import {
+  ApiAuthError,
+  authenticateRequest,
+} from "@/auth/api-auth";
+
+import {
+  EstablishmentService,
+} from "@/services/establishment.service";
+
+import {
+  Logger,
+} from "@/services/logger.service";
+
+import {
+  ApiResponse,
+} from "@/lib/api/ApiResponse";
+
+function handleAuthError(
+  error: unknown
+) {
+  if (
+    !(error instanceof ApiAuthError)
+  ) {
+    return null;
+  }
+
+  switch (
+    error.message
+  ) {
+    case "AUTH_HEADER_MISSING":
+      return ApiResponse.error(
+        "Authentication required",
+        401
+      );
+
+    case "AUTH_HEADER_INVALID":
+      return ApiResponse.error(
+        "Invalid authorization header",
+        401
+      );
+
+    case "TOKEN_EXPIRED":
+      return ApiResponse.error(
+        "Authentication token expired",
+        401
+      );
+
+    case "TOKEN_INVALID":
+      return ApiResponse.error(
+        "Invalid authentication token",
+        401
+      );
+
+    default:
+      return ApiResponse.error(
+        "Authentication failed",
+        401
+      );
+  }
+}
+
+/*
+ * Devuelve únicamente el establecimiento
+ * asociado al usuario autenticado.
+ *
+ * Conservamos formato array porque la pantalla
+ * administrativa ya trabaja con una lista.
+ */
+export async function GET(
+  request: NextRequest
+) {
   try {
-    const allEstablishments = await db.select().from(establishments);
-    
-    return NextResponse.json({
-      success: true,
-      data: allEstablishments,
-    });
-  } catch (error) {
-    console.error('Error fetching establishments:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al obtener establecimientos' },
-      { status: 500 }
+    const authUser =
+      await authenticateRequest(
+        request
+      );
+
+    const establishment =
+      await EstablishmentService
+        .getForAuthenticatedEstablishment(
+          authUser.establishmentId
+        );
+
+    return ApiResponse.success(
+      establishment
+        ? [
+            establishment,
+          ]
+        : [],
+      "Establecimiento obtenido correctamente."
+    );
+  } catch (
+    error
+  ) {
+    Logger.error(
+      "Error obteniendo establecimiento.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(
+        error
+      );
+
+    if (
+      authResponse
+    ) {
+      return authResponse;
+    }
+
+    return ApiResponse.error(
+      "Error obteniendo establecimiento.",
+      500
     );
   }
 }
 
-// POST - Crear nuevo establecimiento
-export async function POST(request: NextRequest) {
+/*
+ * La creación de tenants no pertenece a un
+ * administrador de establecimiento.
+ *
+ * Cuando exista un futuro rol de plataforma /
+ * superadmin, deberá implementarse en una
+ * superficie administrativa específica.
+ */
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const body = await request.json();
-    
-    const newEstablishment = await db
-      .insert(establishments)
-      .values({
-        name: body.name,
-        slug: body.slug || body.name.toLowerCase().replace(/\s+/g, '-'),
-        description: body.description,
-        address: body.address,
-        phone: body.phone,
-        email: body.email,
-        latitude: body.latitude,
-        longitude: body.longitude,
-        maxDeliveryDistance: body.maxDeliveryDistance || 100,
-        geoFenceEnabled: body.geoFenceEnabled || false,
-        currency: body.currency || 'EUR',
-        timezone: body.timezone || 'Europe/Madrid',
-        features: body.features || {},
-        active: body.active !== undefined ? body.active : true,
-      })
-      .returning();
-    
-    return NextResponse.json({
-      success: true,
-      data: newEstablishment[0],
-    });
-  } catch (error) {
-    console.error('Error creating establishment:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al crear establecimiento' },
-      { status: 500 }
+    await authenticateRequest(
+      request
+    );
+
+    return ApiResponse.error(
+      "La creación de establecimientos no está disponible para administradores de establecimiento.",
+      403
+    );
+  } catch (
+    error
+  ) {
+    Logger.error(
+      "Intento de creación de establecimiento.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(
+        error
+      );
+
+    if (
+      authResponse
+    ) {
+      return authResponse;
+    }
+
+    return ApiResponse.error(
+      "Error procesando la solicitud.",
+      500
     );
   }
 }

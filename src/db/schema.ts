@@ -1,5 +1,19 @@
-import { pgTable, text, serial, integer, timestamp, boolean, decimal, jsonb, varchar, uuid, pgEnum } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+﻿import {
+  pgTable,
+  text,
+  serial,
+  integer,
+  timestamp,
+  boolean,
+  decimal,
+  jsonb,
+  varchar,
+  uuid,
+  pgEnum,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
+
+import { relations, sql } from "drizzle-orm";
 
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['admin', 'manager', 'waiter', 'kitchen', 'bar', 'cashier']);
@@ -27,6 +41,23 @@ export const establishments = pgTable("establishments", {
   secondaryColor: text("secondary_color").default("#ffffff"),
   currency: text("currency").default("EUR"),
   timezone: text("timezone").default("Europe/Madrid"),
+
+defaultLanguage: text("default_language")
+  .default("es")
+  .notNull(),
+
+enabledLanguages: jsonb("enabled_languages")
+  .$type<string[]>()
+  .default([
+    "es",
+    "en",
+    "de",
+    "fr",
+    "it",
+    "pt",
+  ])
+  .notNull(),
+
   features: jsonb("features").default({
     geolocation: true,
     onlinePayment: true,
@@ -114,12 +145,16 @@ export const menuSchedules = pgTable("menu_schedules", {
 // Categories
 export const categories = pgTable("categories", {
   id: serial("id").primaryKey(),
-  menuId: integer("menu_id").references(() => menus.id).notNull(),
+  menuId: integer("menu_id").references(() =>
+    menus.id).notNull(),
   name: jsonb("name").notNull(),
   description: jsonb("description"),
   displayOrder: integer("display_order").default(0),
   active: boolean("active").default(true),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt:
+  timestamp("created_at").defaultNow().notNull(),
+  updatedAt:
+  timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Products
@@ -155,23 +190,68 @@ export const modifiers = pgTable("modifiers", {
 });
 
 // Sessions (guest sessions via QR)
-export const sessions = pgTable("sessions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  tableId: integer("table_id").references(() => tables.id).notNull(),
-  establishmentId: integer("establishment_id").references(() => establishments.id).notNull(),
-  customerName: text("customer_name"),
-  customerEmail: text("customer_email"),
-  customerPhone: text("customer_phone"),
-  roomNumber: text("room_number"),
-  latitude: decimal("latitude", { precision: 10, scale: 7 }),
-  longitude: decimal("longitude", { precision: 10, scale: 7 }),
-  deviceId: text("device_id"),
-  language: text("language").default("es"),
-  active: boolean("active").default(true),
-  closedAt: timestamp("closed_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    tableId: integer("table_id")
+      .references(() => tables.id)
+      .notNull(),
+
+    establishmentId: integer("establishment_id")
+      .references(() => establishments.id)
+      .notNull(),
+
+    customerName: text("customer_name"),
+
+    customerEmail: text("customer_email"),
+
+    customerPhone: text("customer_phone"),
+
+    roomNumber: text("room_number"),
+
+    latitude: decimal("latitude", {
+      precision: 10,
+      scale: 7,
+    }),
+
+    longitude: decimal("longitude", {
+      precision: 10,
+      scale: 7,
+    }),
+
+    deviceId: text("device_id"),
+
+    language: text("language")
+      .default("es"),
+
+    active: boolean("active")
+      .default(true),
+
+    closedAt: timestamp("closed_at"),
+
+    createdAt: timestamp("created_at")
+      .defaultNow()
+      .notNull(),
+
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex(
+      "sessions_active_table_unique"
+    )
+      .on(
+        table.establishmentId,
+        table.tableId
+      )
+      .where(
+        sql`${table.active} = true AND ${table.closedAt} IS NULL`
+      ),
+  ]
+);
 
 // Orders
 export const orders = pgTable("orders", {
@@ -237,13 +317,78 @@ export const payments = pgTable("payments", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Payment Methods
+//
+// Configuración multi-tenant de los métodos de pago
+// disponibles para cada establecimiento.
+//
+// IMPORTANTE:
+// Esta tabla no almacena credenciales de proveedores.
+// Las credenciales externas, como Stripe, pertenecen al
+// módulo de integraciones.
+export const paymentMethods = pgTable(
+  "payment_methods",
+  {
+    id:
+      serial("id")
+        .primaryKey(),
+
+    establishmentId:
+      integer("establishment_id")
+        .references(
+          () =>
+            establishments.id
+        )
+        .notNull(),
+
+    method:
+      paymentMethodEnum(
+        "method"
+      )
+        .notNull(),
+
+    enabled:
+      boolean("enabled")
+        .default(true)
+        .notNull(),
+
+    displayName:
+      text("display_name"),
+
+    sortOrder:
+      integer("sort_order")
+        .default(0)
+        .notNull(),
+
+    createdAt:
+      timestamp("created_at")
+        .defaultNow()
+        .notNull(),
+
+    updatedAt:
+      timestamp("updated_at")
+        .defaultNow()
+        .notNull(),
+  },
+  (
+    table
+  ) => [
+    uniqueIndex(
+      "payment_methods_establishment_method_unique"
+    ).on(
+      table.establishmentId,
+      table.method
+    ),
+  ]
+);
+
 // Receipts
 export const receipts = pgTable("receipts", {
   id: serial("id").primaryKey(),
-  sessionId: uuid("session_id").references(() => sessions.id).notNull(),
+  sessionId: uuid("session_id").references(() => sessions.id).notNull().unique(),
   establishmentId: integer("establishment_id").references(() => establishments.id).notNull(),
   receiptNumber: text("receipt_number").notNull().unique(),
-  pdfUrl: text("pdf_url").notNull(),
+  pdfUrl: text("pdf_url"),
   emailSent: boolean("email_sent").default(false),
   total: decimal("total", { precision: 10, scale: 2 }).notNull(),
   items: jsonb("items").notNull(),
@@ -342,7 +487,7 @@ export const analyticsEvents = pgTable("analytics_events", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Meal Vouchers (pensión, media pensión, etc.)
+// Meal Vouchers (pensiÃ³n, media pensiÃ³n, etc.)
 export const mealVouchers = pgTable("meal_vouchers", {
   id: serial("id").primaryKey(),
   establishmentId: integer("establishment_id").references(() => establishments.id).notNull(),
@@ -416,19 +561,75 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   modifiers: many(modifiers),
 }));
 
-export const sessionsRelations = relations(sessions, ({ one, many }) => ({
-  table: one(tables, {
-    fields: [sessions.tableId],
-    references: [tables.id],
-  }),
-  orders: many(orders),
-  payments: many(payments),
-}));
+export const sessionsRelations = relations(
+  sessions,
+  ({ one, many }) => ({
+    table: one(tables, {
+      fields: [sessions.tableId],
+      references: [tables.id],
+    }),
 
-export const ordersRelations = relations(orders, ({ one, many }) => ({
-  session: one(sessions, {
-    fields: [orders.sessionId],
-    references: [sessions.id],
-  }),
-  items: many(orderItems),
-}));
+    orders: many(orders),
+
+    payments: many(payments),
+  })
+);
+
+export const billSplitsRelations = relations(
+  billSplits,
+  ({ one, many }) => ({
+    session: one(sessions, {
+      fields: [billSplits.sessionId],
+      references: [sessions.id],
+    }),
+
+    payments: many(payments),
+  })
+);
+
+export const paymentsRelations = relations(
+  payments,
+  ({ one }) => ({
+    session: one(sessions, {
+      fields: [payments.sessionId],
+      references: [sessions.id],
+    }),
+
+    billSplit: one(billSplits, {
+      fields: [payments.billSplitId],
+      references: [billSplits.id],
+    }),
+
+    establishment: one(establishments, {
+      fields: [payments.establishmentId],
+      references: [establishments.id],
+    }),
+  })
+);
+
+export const ordersRelations = relations(
+  orders,
+  ({ one, many }) => ({
+    session: one(sessions, {
+      fields: [orders.sessionId],
+      references: [sessions.id],
+    }),
+
+    items: many(orderItems),
+  })
+);
+
+export const orderItemsRelations = relations(
+  orderItems,
+  ({ one }) => ({
+    order: one(orders, {
+      fields: [orderItems.orderId],
+      references: [orders.id],
+    }),
+
+    product: one(products, {
+      fields: [orderItems.productId],
+      references: [products.id],
+    }),
+  })
+);

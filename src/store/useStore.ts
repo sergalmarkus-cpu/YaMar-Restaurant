@@ -27,8 +27,8 @@ interface StoreState {
   // Cart
   cart: CartItem[];
   addToCart: (item: CartItem) => void;
-  removeFromCart: (productId: number) => void;
-  updateCartItemQuantity: (productId: number, quantity: number) => void;
+  removeFromCart: (cartIndex: number) => void;
+  updateCartItemQuantity: (cartIndex: number, quantity: number) => void;
   clearCart: () => void;
   
   // Orders
@@ -99,25 +99,68 @@ export const useStore = create<StoreState>()(
             return { cart: [...state.cart, item] };
           }
         }),
-      removeFromCart: (productId) =>
+      removeFromCart: (cartIndex) =>
         set((state) => ({
-          cart: state.cart.filter((item) => item.product.id !== productId),
+          cart: state.cart.filter(
+            (_, index) =>
+              index !== cartIndex
+          ),
         })),
-      updateCartItemQuantity: (productId, quantity) =>
+      updateCartItemQuantity: (
+        cartIndex,
+        quantity
+      ) =>
         set((state) => ({
-          cart: state.cart.map((item) => {
-            if (item.product.id === productId) {
-              const newQuantity = Math.max(0, quantity);
-              const subtotal =
-                parseFloat(item.product.price) * newQuantity +
-                item.selectedModifiers.reduce(
-                  (sum, mod) => sum + parseFloat(mod.price) * newQuantity,
-                  0
-                );
-              return { ...item, quantity: newQuantity, subtotal };
-            }
-            return item;
-          }).filter((item) => item.quantity > 0),
+          cart: state.cart
+            .map(
+              (
+                item,
+                index
+              ) => {
+                if (
+                  index !==
+                  cartIndex
+                ) {
+                  return item;
+                }
+
+                const newQuantity =
+                  Math.max(
+                    0,
+                    quantity
+                  );
+
+                const subtotal =
+                  parseFloat(
+                    item.product.price
+                  ) *
+                    newQuantity +
+                  item.selectedModifiers.reduce(
+                    (
+                      sum,
+                      modifier
+                    ) =>
+                      sum +
+                      parseFloat(
+                        modifier.price
+                      ) *
+                        newQuantity,
+                    0
+                  );
+
+                return {
+                  ...item,
+                  quantity:
+                    newQuantity,
+                  subtotal,
+                };
+              }
+            )
+            .filter(
+              (item) =>
+                item.quantity >
+                0
+            ),
         })),
       clearCart: () => set({ cart: [] }),
       

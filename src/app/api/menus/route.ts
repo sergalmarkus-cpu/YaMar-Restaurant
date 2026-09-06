@@ -1,133 +1,173 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { menus } from '@/db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { NextRequest, NextResponse } from "next/server";
 
-// GET - Obtener todas las cartas activas
-export async function GET(request: NextRequest) {
-  try {
-    const allMenus = await db.select().from(menus);
-    
-    return NextResponse.json({
-      success: true,
-      data: allMenus,
-    });
-  } catch (error) {
-    console.error('Error fetching menus:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al obtener menús' },
-      { status: 500 }
-    );
-  }
+import {
+  ApiAuthError,
+  authenticateRequest,
+} from "@/auth/api-auth";
+
+import { MenuCreateSchema } from "@/validations/menu.validation";
+
+import { MenuService } from "@/services/menu.service";
+import { Logger } from "@/services/logger.service";
+
+import { ApiResponse } from "@/lib/api/ApiResponse";
+
+const MANAGEMENT_ROLES = ["admin", "manager"] as const;
+
+function isManagementRole(
+  role: string
+): role is (typeof MANAGEMENT_ROLES)[number] {
+  return MANAGEMENT_ROLES.includes(
+    role as (typeof MANAGEMENT_ROLES)[number]
+  );
 }
 
-// POST - Crear nueva carta
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    
-    // Definir horarios de apertura de la carta
-    const scheduleHours = body.schedule?.hours || {};
-    
-    const newMenu = await db
-      .insert(menus)
-      .values({
-        establishmentId: body.establishmentId,
-        name: body.name,
-        slug: body.slug || body.name.toLowerCase().replace(/\s+/g, '-'),
-        description: body.description || '',
-        logo: body.logo || null,
-        active: body.active !== undefined ? body.active : true,
-        availabilityType: body.availabilityType || 'schedule',
-        schedule: body.schedule || {
-          enabled: false,
-          days: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'],
-          hours: { start: '09:00', end: '23:00' },
+function handleAuthError(error: unknown) {
+  if (!(error instanceof ApiAuthError)) {
+    return null;
+  }
+
+  switch (error.message) {
+    case "AUTH_HEADER_MISSING":
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Authentication required",
         },
-      })
-      .returning();
-    
-    return NextResponse.json({
-      success: true,
-      data: newMenu[0],
-    });
+        { status: 401 }
+      );
+
+    case "AUTH_HEADER_INVALID":
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid authorization header",
+        },
+        { status: 401 }
+      );
+
+    case "TOKEN_EXPIRED":
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Authentication token expired",
+        },
+        { status: 401 }
+      );
+
+    case "TOKEN_INVALID":
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid authentication token",
+        },
+        { status: 401 }
+      );
+
+    default:
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Authentication failed",
+        },
+        { status: 401 }
+      );
+  }
+}
+
+export async function GET(
+  request: NextRequest
+) {
+  try {
+    const authUser =
+      await authenticateRequest(request);
+
+    const menus =
+      await MenuService.list(
+        authUser.establishmentId
+      );
+
+    return ApiResponse.success(
+      menus,
+      "Menús obtenidos correctamente."
+    );
   } catch (error) {
-    console.error('Error creating menu:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al crear menú' },
-      { status: 500 }
+    Logger.error(
+      "Error obteniendo menús.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(error);
+
+    if (authResponse) {
+      return authResponse;
+    }
+
+    return ApiResponse.error(
+      "Error obteniendo menús.",
+      500
     );
   }
 }
 
-// GET por ID
-export async function GETById(request: NextRequest) {
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    
-    if (!id) {
-      return NextResponse.json(
-        { success: false, error: 'ID requerido' },
-        { status: 400 }
-      );
-    }
-    
-    const menu = await db
-      .select()
-      .from(menus)
-      .where(eq(menus.id, parseInt(id)))
-      .limit(1);
-    
-    if (!menu.length) {
-      return NextResponse.json(
-        { success: false, error: 'Menú no encontrado' },
-        { status: 404 }
-      );
-    }
-    
-    return NextResponse.json({
-      success: true,
-      data: menu[0],
-    });
-  } catch (error) {
-    console.error('Error fetching menu:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al obtener menú' },
-      { status: 500 }
-    );
-  }
-}
+    const authUser =
+      await authenticateRequest(request);
 
-// PUT - Actualizar carta
-export async function PUT(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-    const body = await request.json();
-    
-    const updated = await db
-      .update(menus)
-      .set({
-        name: body.name,
-        description: body.description,
-        logo: body.logo,
-        active: body.active,
-        availabilityType: body.availabilityType,
-        schedule: body.schedule,
-      })
-      .where(eq(menus.id, parseInt(id)))
-      .returning();
-    
-    return NextResponse.json({
-      success: true,
-      data: updated[0],
-    });
-  } catch (error) {
-    console.error('Error updating menu:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al actualizar menú' },
-      { status: 500 }
+    if (!isManagementRole(authUser.role)) {
+      return ApiResponse.error(
+        "No tienes permisos para crear menús.",
+        403
+      );
+    }
+
+    const body =
+      MenuCreateSchema.parse(
+        await request.json()
+      );
+
+    const menu =
+      await MenuService.create(
+        {
+          ...body,
+          establishmentId:
+            authUser.establishmentId,
+        }
+      );
+
+    return ApiResponse.success(
+      menu,
+      "Menú creado correctamente.",
+      201
+    );
+  } catch (error: any) {
+    Logger.error(
+      "Error creando menú.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(error);
+
+    if (authResponse) {
+      return authResponse;
+    }
+
+    if (error?.name === "ZodError") {
+      return ApiResponse.error(
+        "Datos inválidos.",
+        400,
+        error.issues
+      );
+    }
+
+    return ApiResponse.error(
+      "Error creando menú.",
+      500
     );
   }
 }

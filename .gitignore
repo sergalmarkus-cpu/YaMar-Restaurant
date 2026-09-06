@@ -1,8 +1,22 @@
 node_modules/
 .next/
+
+# Environment files
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+
+# Build output
 dist/
 coverage/
+*.tsbuildinfo
+
+# Logs
 *.log
+
+# Private keys / certificates
+*.pem
+*.key
+
+# Legacy/generated
+/generated/prisma

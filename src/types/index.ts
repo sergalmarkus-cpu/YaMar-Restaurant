@@ -1,3 +1,5 @@
+import type { Table } from './table';
+
 // Language types
 export type Language = "es" | "en" | "de" | "fr" | "it" | "pt";
 
@@ -136,19 +138,6 @@ export interface Session {
   createdAt: Date;
 }
 
-export interface Table {
-  id: number;
-  establishmentId: number;
-  areaId?: number;
-  code: string;
-  qrCode: string;
-  capacity: number;
-  status: "available" | "occupied" | "reserved" | "cleaning";
-  latitude?: string;
-  longitude?: string;
-  floor: number;
-}
-
 // Payment types
 export interface BillSplit {
   id?: number;
@@ -235,6 +224,8 @@ export interface Establishment {
   secondaryColor: string;
   currency: string;
   timezone: string;
+  defaultLanguage: Language;
+  enabledLanguages: Language[];
   features: EstablishmentFeatures;
   active: boolean;
 }

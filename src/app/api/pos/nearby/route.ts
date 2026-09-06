@@ -1,40 +1,110 @@
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { pointsOfSale } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { findNearestPOS } from "@/lib/utils";
+import {
+  NextRequest,
+} from "next/server";
 
-export async function GET(request: NextRequest) {
+import {
+  ApiAuthError,
+  authenticateRequest,
+} from "@/auth/api-auth";
+
+import {
+  PosNearbyQuerySchema,
+} from "@/validations/pos.validation";
+
+import {
+  PosService,
+} from "@/services/pos.service";
+
+import {
+  Logger,
+} from "@/services/logger.service";
+
+import {
+  ApiResponse,
+} from "@/lib/api/ApiResponse";
+
+function handleAuthError(
+  error: unknown
+) {
+  if (
+    error instanceof ApiAuthError
+  ) {
+    return ApiResponse.error(
+      error.message,
+      401
+    );
+  }
+
+  return null;
+}
+
+export async function GET(
+  request: NextRequest
+) {
   try {
-    const { searchParams } = new URL(request.url);
-    const establishmentId = searchParams.get("establishmentId");
-    const latitude = searchParams.get("latitude");
-    const longitude = searchParams.get("longitude");
+    const authUser =
+      await authenticateRequest(
+        request
+      );
 
-    if (!establishmentId || !latitude || !longitude) {
-      return NextResponse.json(
-        { error: "Missing required parameters" },
-        { status: 400 }
+    const query =
+      PosNearbyQuerySchema.parse({
+        latitude:
+          request.nextUrl.searchParams.get(
+            "latitude"
+          ),
+
+        longitude:
+          request.nextUrl.searchParams.get(
+            "longitude"
+          ),
+      });
+
+    const result =
+      await PosService
+        .nearbyForEstablishment(
+          authUser.establishmentId,
+          query.latitude,
+          query.longitude
+        );
+
+    return ApiResponse.success(
+      result,
+      "Puntos de venta cercanos obtenidos correctamente."
+    );
+  } catch (
+    error: any
+  ) {
+    Logger.error(
+      "Error obteniendo puntos de venta cercanos.",
+      error
+    );
+
+    const auth =
+      handleAuthError(
+        error
+      );
+
+    if (
+      auth
+    ) {
+      return auth;
+    }
+
+    if (
+      error?.name ===
+      "ZodError"
+    ) {
+      return ApiResponse.error(
+        "Coordenadas no válidas.",
+        400,
+        error.issues
       );
     }
 
-    const allPOS = await db
-      .select()
-      .from(pointsOfSale)
-      .where(eq(pointsOfSale.establishmentId, parseInt(establishmentId)));
-
-    const nearbyPOS = findNearestPOS(
-      parseFloat(latitude),
-      parseFloat(longitude),
-      allPOS
-    );
-
-    return NextResponse.json(nearbyPOS);
-  } catch (error) {
-    console.error("Error fetching nearby POS:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return ApiResponse.error(
+      "Error obteniendo puntos de venta cercanos.",
+      500
     );
   }
 }

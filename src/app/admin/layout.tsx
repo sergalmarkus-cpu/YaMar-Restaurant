@@ -1,14 +1,25 @@
-import AdminLayout from './components/AdminLayout';
+import AdminLayout from "./components/AdminLayout";
+import AdminAuthGuard from "./components/AdminAuthGuard";
 
 export const metadata = {
-  title: 'YaMar - Panel de Administración',
-  description: 'Sistema Integral de Gestión del Servicio de Sala',
+  title:
+    "YaMar - Panel de Administración",
+
+  description:
+    "Sistema Integral de Gestión del Servicio de Sala",
 };
 
 export default function Layout({
   children,
 }: {
-  children: React.ReactNode;
+  children:
+    React.ReactNode;
 }) {
-  return <AdminLayout>{children}</AdminLayout>;
+  return (
+    <AdminAuthGuard>
+      <AdminLayout>
+        {children}
+      </AdminLayout>
+    </AdminAuthGuard>
+  );
 }

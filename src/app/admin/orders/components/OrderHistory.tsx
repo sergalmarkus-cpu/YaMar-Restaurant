@@ -2,6 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { ShoppingCart, CheckCircle, Clock, TrendingUp } from 'lucide-react';
+import type {
+  Order,
+  OrderStatus,
+} from '@/types/order';
 
 const statusConfig = {
   pending: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
@@ -13,12 +17,37 @@ const statusConfig = {
 };
 
 export default function OrderHistory() {
-  const [orders, setOrders] = useState([]);
-  const [filter, setFilter] = useState('all');
+  type OrderStatus =
+  | 'pending'
+  | 'accepted'
+  | 'preparing'
+  | 'ready'
+  | 'delivered'
+  | 'cancelled';
 
-  const filteredOrders = filter === 'all' 
-    ? orders 
-    : orders.filter(o => o.order.status === filter);
+interface Order {
+  id: number;
+  tableNumber: string | null;
+  customerName: string | null;
+  total: number;
+  status: OrderStatus;
+  createdAt: string;
+}
+
+interface OrderRow {
+  order: Order;
+}
+
+const [orders, setOrders] = useState<Order[]>([]);
+
+const [filter, setFilter] = useState<
+    'all' | OrderStatus
+>('all');
+
+const filteredOrders =
+    filter === 'all'
+        ? orders
+        : orders.filter(o => o.status === filter);
 
   return (
     <div className="space-y-6">
@@ -33,7 +62,9 @@ export default function OrderHistory() {
         
         <select
           value={filter}
-          onChange={(e) => setFilter(e.target.value)}
+          onChange={(e) =>
+  setFilter(e.target.value as OrderStatus | 'all')
+}
           className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
         >
           <option value="all">Todos</option>
@@ -71,7 +102,7 @@ export default function OrderHistory() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {filteredOrders.map(({ order }) => (
+            {filteredOrders.map((order) => (
               <tr key={order.id} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   #{order.id}
@@ -86,7 +117,7 @@ export default function OrderHistory() {
                   €{order.total.toFixed(2)}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig[order.status]?.color || 'bg-gray-100'}`}>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusConfig[order.status as OrderStatus]?.color || 'bg-gray-100'}`}>
                     {statusConfig[order.status]?.label || order.status}
                   </span>
                 </td>

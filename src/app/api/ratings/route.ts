@@ -1,116 +1,200 @@
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
-import { ratings, sessions, orders } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
+import { NextRequest } from "next/server";
 
-export async function POST(request: NextRequest) {
+import {
+  ApiAuthError,
+  authenticateRequest,
+} from "@/auth/api-auth";
+
+import { ApiResponse } from "@/lib/api/ApiResponse";
+
+import { RatingService } from "@/services/rating.service";
+import { Logger } from "@/services/logger.service";
+
+import { CreateRatingSchema } from "@/validations/rating.validation";
+
+function handleAuthError(error: unknown) {
+  if (!(error instanceof ApiAuthError)) {
+    return null;
+  }
+
+  switch (error.message) {
+    case "AUTH_HEADER_MISSING":
+      return ApiResponse.error(
+        "Authentication required",
+        401
+      );
+
+    case "AUTH_HEADER_INVALID":
+      return ApiResponse.error(
+        "Invalid authorization header",
+        401
+      );
+
+    case "TOKEN_EXPIRED":
+      return ApiResponse.error(
+        "Authentication token expired",
+        401
+      );
+
+    case "TOKEN_INVALID":
+      return ApiResponse.error(
+        "Invalid authentication token",
+        401
+      );
+
+    default:
+      return ApiResponse.error(
+        "Authentication failed",
+        401
+      );
+  }
+}
+
+/*
+ * ==========================================================
+ * POST PÚBLICO
+ * Crear valoración desde una sesión de cliente
+ * ==========================================================
+ */
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const body = await request.json();
-    const {
-      sessionId,
-      foodRating,
-      serviceRating,
-      attentionRating,
-      comment,
-      photos = [],
-    } = body;
+    const body =
+      CreateRatingSchema.parse(
+        await request.json()
+      );
 
-    // Validate session
-    const [session] = await db
-      .select()
-      .from(sessions)
-      .where(eq(sessions.id, sessionId))
-      .limit(1);
+    const rating =
+      await RatingService.create(
+        body
+      );
 
-    if (!session) {
-      return NextResponse.json(
-        { error: "Invalid session" },
-        { status: 400 }
+    return ApiResponse.success(
+      rating,
+      "Valoración creada correctamente.",
+      201
+    );
+  } catch (error: any) {
+    Logger.error(
+      "Error creando valoración.",
+      error
+    );
+
+    if (
+      error?.name ===
+      "ZodError"
+    ) {
+      return ApiResponse.error(
+        "Datos inválidos.",
+        400,
+        error.issues
       );
     }
 
-    // Check if session has orders
-    const sessionOrders = await db
-      .select()
-      .from(orders)
-      .where(eq(orders.sessionId, sessionId))
-      .limit(1);
+    if (error instanceof Error) {
+      switch (error.message) {
+        case "SESSION_NOT_FOUND":
+          return ApiResponse.error(
+            "Sesión no encontrada.",
+            404
+          );
 
-    if (sessionOrders.length === 0) {
-      return NextResponse.json(
-        { error: "Cannot rate without orders" },
-        { status: 400 }
-      );
+        case "ESTABLISHMENT_INACTIVE":
+          return ApiResponse.error(
+            "El establecimiento no está activo.",
+            400
+          );
+
+        case "NO_DELIVERED_ORDER":
+          return ApiResponse.error(
+            "No se puede valorar sin un pedido entregado.",
+            409
+          );
+
+        case "SESSION_ALREADY_RATED":
+          return ApiResponse.error(
+            "La sesión ya tiene una valoración.",
+            409
+          );
+
+        default:
+          break;
+      }
     }
 
-    // Check if already rated
-    const existingRating = await db
-      .select()
-      .from(ratings)
-      .where(eq(ratings.sessionId, sessionId))
-      .limit(1);
-
-    if (existingRating.length > 0) {
-      return NextResponse.json(
-        { error: "Session already rated" },
-        { status: 400 }
-      );
-    }
-
-    // Create rating
-    const [rating] = await db
-      .insert(ratings)
-      .values({
-        sessionId,
-        establishmentId: session.establishmentId,
-        foodRating,
-        serviceRating,
-        attentionRating,
-        comment,
-        photos,
-        approved: false, // Requires moderation
-      })
-      .returning();
-
-    return NextResponse.json(rating);
-  } catch (error) {
-    console.error("Error creating rating:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    return ApiResponse.error(
+      "Error creando valoración.",
+      500
     );
   }
 }
 
-export async function GET(request: NextRequest) {
+/*
+ * ==========================================================
+ * GET ADMINISTRATIVO
+ * Listar valoraciones del establecimiento autenticado
+ * ==========================================================
+ */
+export async function GET(
+  request: NextRequest
+) {
   try {
-    const { searchParams } = new URL(request.url);
-    const establishmentId = searchParams.get("establishmentId");
+    const authUser =
+      await authenticateRequest(request);
 
-    if (!establishmentId) {
-      return NextResponse.json(
-        { error: "establishmentId is required" },
-        { status: 400 }
+    const approvedParam =
+      request.nextUrl.searchParams.get(
+        "approved"
       );
+
+    let approved:
+      | boolean
+      | undefined;
+
+    if (
+      approvedParam !== null
+    ) {
+      if (
+        approvedParam !== "true" &&
+        approvedParam !== "false"
+      ) {
+        return ApiResponse.error(
+          "approved debe ser true o false.",
+          400
+        );
+      }
+
+      approved =
+        approvedParam === "true";
     }
 
-    const approvedRatings = await db
-      .select()
-      .from(ratings)
-      .where(
-        and(
-          eq(ratings.establishmentId, parseInt(establishmentId)),
-          eq(ratings.approved, true)
-        )
-      )
-      .orderBy(ratings.createdAt);
+    const ratings =
+      await RatingService.getByEstablishment(
+        authUser.establishmentId,
+        approved
+      );
 
-    return NextResponse.json(approvedRatings);
+    return ApiResponse.success(
+      ratings,
+      "Valoraciones obtenidas correctamente."
+    );
   } catch (error) {
-    console.error("Error fetching ratings:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    Logger.error(
+      "Error obteniendo valoraciones.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(error);
+
+    if (authResponse) {
+      return authResponse;
+    }
+
+    return ApiResponse.error(
+      "Error obteniendo valoraciones.",
+      500
     );
   }
 }

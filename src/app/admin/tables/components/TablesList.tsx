@@ -1,271 +1,356 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { 
-  Grid3X3, 
-  Plus, 
-  QrCode, 
-  Users, 
-  Edit2, 
-  Trash2,
-  Download,
-  ToggleLeft,
-  ToggleRight
-} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Plus, Search } from 'lucide-react';
+import { toast } from 'sonner';
+
+import StatsCards from './StatsCards';
+import TablesGrid from './TablesGrid';
+import NewTableModal from './NewTableModal';
+import EditTableModal from './EditTableModal';
+import QRModal from './QRModal';
+import {
+  adminFetch,
+} from "@/lib/api/admin-fetch";
+
+import type { Table } from '@/types/table';
 
 interface Area {
   id: number;
   name: string;
-  establishmentId: number;
-  active: boolean;
-}
-
-interface Table {
-  id: number;
-  tableNumber: string;
-  capacity: number;
-  qrCode: string;
-  status: string;
-  active: boolean;
-  areaId: number;
-  area?: Area;
 }
 
 export default function TablesList() {
   const [tables, setTables] = useState<Table[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
-  const [selectedArea, setSelectedArea] = useState<number | null>(null);
+
   const [loading, setLoading] = useState(true);
-  const [showQR, setShowQR] = useState<{ table: Table; qrImage: string } | null>(null);
+
+  const [search, setSearch] = useState('');
+  const [selectedArea, setSelectedArea] = useState('');
+
+  const [showNewModal, setShowNewModal] = useState(false);
+
+  const [editingTable, setEditingTable] =
+    useState<Table | null>(null);
+
+  const [qrTable, setQrTable] =
+    useState<Table | null>(null);
+
+  const [qrImage, setQrImage] =
+    useState('');
 
   useEffect(() => {
-    fetchAreas();
-    fetchTables();
-  }, [selectedArea]);
+    loadData();
+  }, []);
 
-  const fetchAreas = async () => {
+  async function loadData() {
+    setLoading(true);
+
     try {
-      const response = await fetch('/api/areas');
-      const data = await response.json();
-      if (data.success) {
-        setAreas(data.data);
+      await Promise.all([
+        loadTables(),
+        loadAreas(),
+      ]);
+    } catch (error) {
+      console.error(error);
+
+      toast.error(
+        'No se pudieron cargar los datos.'
+      );
+    }
+
+    setLoading(false);
+  }
+
+  async function loadTables() {
+    const res = await adminFetch("/api/tables");
+
+    const json = await res.json();
+
+    if (json.success) {
+      setTables(json.data);
+    }
+  }
+
+  async function loadAreas() {
+    const res = await adminFetch("/api/areas");
+
+    const json = await res.json();
+
+    if (json.success) {
+      setAreas(json.data);
+    }
+  }
+  async function toggleTable(table: Table) {
+    try {
+      const res = await adminFetch(
+  `/api/tables/${table.id}`,
+  {
+    method: "PUT",
+    headers: {
+      "Content-Type":
+        "application/json",
+    },
+    body: JSON.stringify({
+      active:
+        !table.active,
+    }),
+  }
+);
+
+      const json = await res.json();
+
+      if (json.success) {
+        toast.success(
+          table.active
+            ? 'Mesa desactivada.'
+            : 'Mesa activada.'
+        );
+
+        loadTables();
+      } else {
+        toast.error('No se pudo actualizar la mesa.');
       }
     } catch (error) {
-      console.error('Error fetching areas:', error);
+      console.error(error);
+      toast.error('Error al actualizar la mesa.');
     }
-  };
+  }
 
-  const fetchTables = async () => {
+  async function deleteTable(table: Table) {
+    if (
+      !window.confirm(
+        `¿Eliminar definitivamente la mesa ${table.code}?`
+      )
+    ) {
+      return;
+    }
+
     try {
-      const url = selectedArea 
-        ? `/api/tables?areaId=${selectedArea}`
-        : '/api/tables';
-      
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.success) {
-        setTables(data.data);
+      const res = await adminFetch(
+  `/api/tables/${table.id}`,
+  {
+    method:
+      "DELETE",
+  }
+);
+
+      const json = await res.json();
+
+      if (json.success) {
+        toast.success('Mesa eliminada correctamente.');
+        loadTables();
+      } else {
+        toast.error('No se pudo eliminar la mesa.');
       }
     } catch (error) {
-      console.error('Error fetching tables:', error);
-    } finally {
-      setLoading(false);
+      console.error(error);
+      toast.error('Error eliminando la mesa.');
     }
-  };
+  }
 
-  const generateQR = async (table: Table) => {
-    try {
-      const response = await fetch('/api/tables/qr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          qrCode: table.qrCode,
-          tableNumber: table.tableNumber,
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setShowQR({ table, qrImage: data.data.qrImage });
-      }
-    } catch (error) {
-      console.error('Error generating QR:', error);
+  async function showQR(table: Table) {
+  try {
+    const res = await adminFetch(
+  "/api/tables/qr",
+  {
+    method:
+      "POST",
+
+    headers: {
+      "Content-Type":
+        "application/json",
+    },
+
+    body:
+      JSON.stringify({
+        tableId:
+          table.id,
+      }),
+  }
+);
+
+    const json =
+      await res.json();
+
+    if (json.success) {
+      setQrImage(
+        json.data.qrImage
+      );
+
+      setQrTable(
+        table
+      );
+    } else {
+      toast.error(
+        json.error ||
+          "No se pudo generar el código QR."
+      );
     }
-  };
+  } catch (error) {
+    console.error(
+      error
+    );
 
-  const downloadQR = () => {
-    if (!showQR) return;
-    
-    const link = document.createElement('a');
-    link.href = showQR.qrImage;
-    link.download = `mesa-${showQR.table.tableNumber}-qr.png`;
-    link.click();
-  };
+    toast.error(
+      "Error generando el código QR."
+    );
+  }
+}
 
-  const getStatusColor = (status: string) => {
-    const colors = {
-      available: 'bg-green-100 text-green-800',
-      occupied: 'bg-red-100 text-red-800',
-      reserved: 'bg-yellow-100 text-yellow-800',
-      cleaning: 'bg-blue-100 text-blue-800',
+  const filteredTables = useMemo(() => {
+    return tables.filter((table) => {
+      const matchesSearch =
+        table.code
+          .toLowerCase()
+          .includes(search.toLowerCase());
+
+      const matchesArea =
+        selectedArea === '' ||
+        String(table.areaId ?? '') === selectedArea;
+
+      return matchesSearch && matchesArea;
+    });
+  }, [tables, search, selectedArea]);
+
+  const stats = useMemo(() => {
+    return {
+      total: tables.length,
+      available: tables.filter(
+        (t) => t.status === 'available'
+      ).length,
+      occupied: tables.filter(
+        (t) => t.status === 'occupied'
+      ).length,
+      reserved: tables.filter(
+        (t) => t.status === 'reserved'
+      ).length,
     };
-    return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
-  };
-
-  const getStatusLabel = (status: string) => {
-    const labels = {
-      available: 'Disponible',
-      occupied: 'Ocupada',
-      reserved: 'Reservada',
-      cleaning: 'Limpieza',
-    };
-    return labels[status as keyof typeof labels] || status;
-  };
+  }, [tables]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="p-8">
+        Cargando mesas...
       </div>
     );
   }
-
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Mesas</h2>
-          <p className="text-gray-600 mt-1">
-            Gestiona las mesas de tu establecimiento
-          </p>
-        </div>
-        
-        <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-          <Plus size={20} />
-          Nueva Mesa
-        </button>
-      </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-4">
-        <select
-          value={selectedArea || ''}
-          onChange={(e) => setSelectedArea(e.target.value ? parseInt(e.target.value) : null)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          <h1 className="text-3xl font-bold">
+            Gestión de Mesas
+          </h1>
+
+          <p className="text-gray-500 mt-1">
+            Administra todas las mesas del establecimiento.
+          </p>
+
+        </div>
+
+        <button
+          onClick={() => setShowNewModal(true)}
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl transition"
         >
-          <option value="">Todas las áreas</option>
-          {areas.map((area) => (
-            <option key={area.id} value={area.id}>
-              {area.name}
-            </option>
-          ))}
-        </select>
+          <Plus size={18} />
+          Nueva mesa
+        </button>
+
       </div>
 
-      {/* Tables Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {tables.map((table) => (
-          <div
-            key={table.id}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow"
+      <StatsCards
+        total={stats.total}
+        available={stats.available}
+        occupied={stats.occupied}
+        reserved={stats.reserved}
+      />
+
+      <div className="bg-white rounded-2xl border shadow-sm p-5">
+
+        <div className="flex flex-col lg:flex-row gap-4">
+
+          <div className="relative flex-1">
+
+            <Search
+              size={18}
+              className="absolute left-3 top-3.5 text-gray-400"
+            />
+
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar mesa..."
+              className="w-full border rounded-xl pl-10 pr-4 py-3"
+            />
+
+          </div>
+
+          <select
+            value={selectedArea}
+            onChange={(e) => setSelectedArea(e.target.value)}
+            className="border rounded-xl px-4 py-3 lg:w-64"
           >
-            {/* Header */}
-            <div className="p-6 border-b border-gray-100">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
-                    <Grid3X3 size={24} className="text-indigo-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-lg">
-                      Mesa {table.tableNumber}
-                    </h3>
-                    <p className="text-sm text-gray-500 flex items-center gap-1">
-                      <Users size={14} />
-                      {table.capacity} personas
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(table.status)}`}>
-                {getStatusLabel(table.status)}
-              </span>
-            </div>
 
-            {/* Actions */}
-            <div className="p-4 bg-gray-50 flex items-center justify-between gap-2">
-              <button
-                onClick={() => generateQR(table)}
-                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 text-sm"
+            <option value="">
+              Todas las áreas
+            </option>
+
+            {areas.map((area) => (
+
+              <option
+                key={area.id}
+                value={String(area.id)}
               >
-                <QrCode size={16} />
-                Ver QR
-              </button>
-              
-              <button className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
-                <Edit2 size={16} />
-              </button>
-              
-              <button className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                <Trash2 size={16} />
-              </button>
-            </div>
-          </div>
-        ))}
+                {area.name}
+              </option>
+
+            ))}
+
+          </select>
+
+        </div>
+
       </div>
 
-      {/* Empty State */}
-      {tables.length === 0 && (
-        <div className="text-center py-12">
-          <Grid3X3 size={48} className="mx-auto text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">
-            No hay mesas
-          </h3>
-          <p className="text-gray-600 mb-6">
-            Comienza creando tu primera mesa
-          </p>
-        </div>
-      )}
+      <TablesGrid
+        tables={filteredTables}
+        onShowQR={showQR}
+        onEdit={setEditingTable}
+        onDelete={deleteTable}
+        onToggle={toggleTable}
+      />
 
-      {/* QR Modal */}
-      {showQR && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">
-              Código QR - Mesa {showQR.table.tableNumber}
-            </h3>
-            
-            <div className="bg-gray-50 p-6 rounded-lg mb-4">
-              <img 
-                src={showQR.qrImage} 
-                alt="QR Code" 
-                className="w-full h-auto"
-              />
-            </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={downloadQR}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-              >
-                <Download size={20} />
-                Descargar
-              </button>
-              
-              <button
-                onClick={() => setShowQR(null)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <NewTableModal
+        open={showNewModal}
+        onClose={() => setShowNewModal(false)}
+        onCreated={loadTables}
+      />
+
+      <EditTableModal
+        open={editingTable !== null}
+        table={editingTable}
+        onClose={() => setEditingTable(null)}
+        onUpdated={() => {
+          loadTables();
+          setEditingTable(null);
+        }}
+      />
+
+      <QRModal
+        open={qrTable !== null}
+        tableCode={qrTable?.code ?? ''}
+        qrImage={qrImage}
+        onClose={() => {
+          setQrTable(null);
+          setQrImage('');
+        }}
+      />
+
     </div>
   );
 }

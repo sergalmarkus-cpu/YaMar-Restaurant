@@ -1,87 +1,295 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { products, categories, menus } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import {
+  NextRequest,
+} from "next/server";
 
-// GET - Obtener todos los productos
-export async function GET(request: NextRequest) {
+import {
+  ApiAuthError,
+  authenticateRequest,
+} from "@/auth/api-auth";
+
+import {
+  AdminCreateProductSchema,
+} from "@/validations/product.validation";
+
+import {
+  ProductService,
+} from "@/services/product.service";
+
+import {
+  Logger,
+} from "@/services/logger.service";
+
+import {
+  ApiResponse,
+} from "@/lib/api/ApiResponse";
+
+const MANAGEMENT_ROLES = [
+  "admin",
+  "manager",
+] as const;
+
+function isManagementRole(
+  role:
+    string
+): role is (typeof MANAGEMENT_ROLES)[number] {
+  return MANAGEMENT_ROLES.includes(
+    role as (typeof MANAGEMENT_ROLES)[number]
+  );
+}
+
+function handleAuthError(
+  error:
+    unknown
+) {
+  if (
+    !(error instanceof ApiAuthError)
+  ) {
+    return null;
+  }
+
+  switch (
+    error.message
+  ) {
+    case "AUTH_HEADER_MISSING":
+      return ApiResponse.error(
+        "Authentication required",
+        401
+      );
+
+    case "AUTH_HEADER_INVALID":
+      return ApiResponse.error(
+        "Invalid authorization header",
+        401
+      );
+
+    case "TOKEN_EXPIRED":
+      return ApiResponse.error(
+        "Authentication token expired",
+        401
+      );
+
+    case "TOKEN_INVALID":
+      return ApiResponse.error(
+        "Invalid authentication token",
+        401
+      );
+
+    default:
+      return ApiResponse.error(
+        "Authentication failed",
+        401
+      );
+  }
+}
+
+export async function GET(
+  request:
+    NextRequest
+) {
   try {
-    const { searchParams } = new URL(request.url);
-    const categoryId = searchParams.get('categoryId');
-    const establishmentId = searchParams.get('establishmentId');
-    const menuId = searchParams.get('menuId');
-    
-    let query = db
-      .select({
-        product: products,
-        category: categories,
-      })
-      .from(products)
-      .leftJoin(categories, eq(products.categoryId, categories.id));
-    
-    if (categoryId) {
-      query = query.where(eq(products.categoryId, parseInt(categoryId))) as any;
+    const authUser =
+      await authenticateRequest(
+        request
+      );
+
+    const {
+      searchParams,
+    } =
+      new URL(
+        request.url
+      );
+
+    const categoryIdParam =
+      searchParams.get(
+        "categoryId"
+      );
+
+    const menuIdParam =
+      searchParams.get(
+        "menuId"
+      );
+
+    let categoryId:
+      number | undefined;
+
+    let menuId:
+      number | undefined;
+
+    if (
+      categoryIdParam !==
+      null
+    ) {
+      const parsed =
+        Number(
+          categoryIdParam
+        );
+
+      if (
+        !Number.isInteger(
+          parsed
+        ) ||
+        parsed <=
+          0
+      ) {
+        return ApiResponse.error(
+          "El categoryId no es válido.",
+          400
+        );
+      }
+
+      categoryId =
+        parsed;
     }
-    
-    if (establishmentId) {
-      query = query.where(eq(products.establishmentId, parseInt(establishmentId))) as any;
+
+    if (
+      menuIdParam !==
+      null
+    ) {
+      const parsed =
+        Number(
+          menuIdParam
+        );
+
+      if (
+        !Number.isInteger(
+          parsed
+        ) ||
+        parsed <=
+          0
+      ) {
+        return ApiResponse.error(
+          "El menuId no es válido.",
+          400
+        );
+      }
+
+      menuId =
+        parsed;
     }
-    
-    if (menuId) {
-      query = query.where(eq(products.menuId, parseInt(menuId))) as any;
+
+    const productList =
+      await ProductService.listForEstablishment(
+        authUser.establishmentId,
+        categoryId,
+        menuId
+      );
+
+    return ApiResponse.success(
+      productList,
+      "Productos obtenidos correctamente."
+    );
+  } catch (
+    error
+  ) {
+    Logger.error(
+      "Error obteniendo productos.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(
+        error
+      );
+
+    if (
+      authResponse
+    ) {
+      return authResponse;
     }
-    
-    const result = await query;
-    
-    return NextResponse.json({
-      success: true,
-      data: result,
-    });
-  } catch (error) {
-    console.error('Error fetching products:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al obtener productos' },
-      { status: 500 }
+
+    return ApiResponse.error(
+      "Error obteniendo productos.",
+      500
     );
   }
 }
 
-// POST - Crear nuevo producto
-export async function POST(request: NextRequest) {
+export async function POST(
+  request:
+    NextRequest
+) {
   try {
-    const body = await request.json();
-    
-    const newProduct = await db
-      .insert(products)
-      .values({
-        establishmentId: body.establishmentId,
-        categoryId: body.categoryId,
-        menuId: body.menuId || null,
-        name: body.name,
-        description: body.description || '',
-        price: parseFloat(body.price),
-        image: body.image || null,
-        calories: body.calories || null,
-        allergens: body.allergens || [],
-        modifiers: body.modifiers || [],
-        isVegetarian: body.isVegetarian || false,
-        isVegan: body.isVegan || false,
-        isSpicy: body.isSpicy || false,
-        available: body.available !== undefined ? body.available : true,
-        preparationTime: body.preparationTime || 15,
-        sortOrder: body.sortOrder || 0,
-      })
-      .returning();
-    
-    return NextResponse.json({
-      success: true,
-      data: newProduct[0],
-    });
-  } catch (error) {
-    console.error('Error creating product:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al crear producto' },
-      { status: 500 }
+    const authUser =
+      await authenticateRequest(
+        request
+      );
+
+    if (
+      !isManagementRole(
+        authUser.role
+      )
+    ) {
+      return ApiResponse.error(
+        "No tienes permisos para crear productos.",
+        403
+      );
+    }
+
+    const body =
+      AdminCreateProductSchema.parse(
+        await request.json()
+      );
+
+    const product =
+      await ProductService.createForEstablishment(
+        authUser.establishmentId,
+        body
+      );
+
+    return ApiResponse.success(
+      product,
+      "Producto creado correctamente.",
+      201
+    );
+  } catch (
+    error:
+      any
+  ) {
+    Logger.error(
+      "Error creando producto.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(
+        error
+      );
+
+    if (
+      authResponse
+    ) {
+      return authResponse;
+    }
+
+    if (
+      error?.name ===
+      "ZodError"
+    ) {
+      return ApiResponse.error(
+        "Datos inválidos.",
+        400,
+        error.issues
+      );
+    }
+
+    if (
+      error instanceof
+        Error
+    ) {
+      if (
+        error.message ===
+        "CATEGORY_NOT_FOUND"
+      ) {
+        return ApiResponse.error(
+          "Categoría no encontrada.",
+          404
+        );
+      }
+    }
+
+    return ApiResponse.error(
+      "No se pudo crear el producto.",
+      500
     );
   }
 }

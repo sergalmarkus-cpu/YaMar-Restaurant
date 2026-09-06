@@ -1,71 +1,235 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/db';
-import { tables } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { randomBytes } from 'crypto';
+import { NextRequest } from "next/server";
 
-// GET - Obtener todas las mesas
-export async function GET(request: NextRequest) {
+import {
+  ApiAuthError,
+  authenticateRequest,
+} from "@/auth/api-auth";
+
+import {
+  CreateTableSchema,
+} from "@/validations/table.validation";
+
+import {
+  TableService,
+} from "@/services/table.service";
+
+import {
+  Logger,
+} from "@/services/logger.service";
+
+import {
+  ApiResponse,
+} from "@/lib/api/ApiResponse";
+
+const MANAGEMENT_ROLES = [
+  "admin",
+  "manager",
+] as const;
+
+function isManagementRole(
+  role: string
+): role is (typeof MANAGEMENT_ROLES)[number] {
+  return MANAGEMENT_ROLES.includes(
+    role as (typeof MANAGEMENT_ROLES)[number]
+  );
+}
+
+function handleAuthError(error: unknown) {
+  if (!(error instanceof ApiAuthError)) {
+    return null;
+  }
+
+  switch (error.message) {
+    case "AUTH_HEADER_MISSING":
+      return ApiResponse.error(
+        "Authentication required",
+        401
+      );
+
+    case "AUTH_HEADER_INVALID":
+      return ApiResponse.error(
+        "Invalid authorization header",
+        401
+      );
+
+    case "TOKEN_EXPIRED":
+      return ApiResponse.error(
+        "Authentication token expired",
+        401
+      );
+
+    case "TOKEN_INVALID":
+      return ApiResponse.error(
+        "Invalid authentication token",
+        401
+      );
+
+    default:
+      return ApiResponse.error(
+        "Authentication failed",
+        401
+      );
+  }
+}
+
+export async function GET(
+  request: NextRequest
+) {
   try {
-    const { searchParams } = new URL(request.url);
-    const areaId = searchParams.get('areaId');
-    const establishmentId = searchParams.get('establishmentId');
-    
-    let query = db.select().from(tables);
-    
-    if (areaId) {
-      query = query.where(eq(tables.areaId, parseInt(areaId))) as any;
+    const authUser =
+      await authenticateRequest(request);
+
+    const {
+      searchParams,
+    } = new URL(request.url);
+
+    const areaId =
+      searchParams.get("areaId");
+
+    const parsedAreaId =
+      areaId !== null
+        ? Number(areaId)
+        : undefined;
+
+    if (
+      parsedAreaId !== undefined &&
+      (
+        !Number.isInteger(
+          parsedAreaId
+        ) ||
+        parsedAreaId <= 0
+      )
+    ) {
+      return ApiResponse.error(
+        "areaId inválido.",
+        400
+      );
     }
-    
-    if (establishmentId) {
-      query = query.where(eq(tables.establishmentId, parseInt(establishmentId))) as any;
-    }
-    
-    const allTables = await query;
-    
-    return NextResponse.json({
-      success: true,
-      data: allTables,
-    });
+
+    const tables =
+      await TableService.list(
+        authUser.establishmentId,
+        parsedAreaId
+      );
+
+    return ApiResponse.success(
+      tables,
+      "Mesas obtenidas correctamente."
+    );
   } catch (error) {
-    console.error('Error fetching tables:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al obtener mesas' },
-      { status: 500 }
+    Logger.error(
+      "Error obteniendo mesas.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(error);
+
+    if (authResponse) {
+      return authResponse;
+    }
+
+    return ApiResponse.error(
+      "Error obteniendo mesas.",
+      500
     );
   }
 }
 
-// POST - Crear nueva mesa
-export async function POST(request: NextRequest) {
+export async function POST(
+  request: NextRequest
+) {
   try {
-    const body = await request.json();
-    
-    // Generar código QR único
-    const qrCode = randomBytes(16).toString('hex');
-    
-    const newTable = await db
-      .insert(tables)
-      .values({
-        establishmentId: body.establishmentId,
-        areaId: body.areaId,
-        tableNumber: body.tableNumber,
-        capacity: body.capacity || 4,
-        qrCode: qrCode,
-        status: 'available',
-        active: body.active !== undefined ? body.active : true,
-      })
-      .returning();
-    
-    return NextResponse.json({
-      success: true,
-      data: newTable[0],
-    });
-  } catch (error) {
-    console.error('Error creating table:', error);
-    return NextResponse.json(
-      { success: false, error: 'Error al crear mesa' },
-      { status: 500 }
+    const authUser =
+      await authenticateRequest(request);
+
+    if (
+      !isManagementRole(
+        authUser.role
+      )
+    ) {
+      return ApiResponse.error(
+        "No tienes permiso para crear mesas.",
+        403
+      );
+    }
+
+    const body =
+      CreateTableSchema.parse(
+        await request.json()
+      );
+
+    const table =
+      await TableService.create(
+        authUser.establishmentId,
+        body
+      );
+
+    return ApiResponse.success(
+      table,
+      "Mesa creada correctamente.",
+      201
+    );
+  } catch (error: any) {
+    Logger.error(
+      "Error creando mesa.",
+      error
+    );
+
+    const authResponse =
+      handleAuthError(error);
+
+    if (authResponse) {
+      return authResponse;
+    }
+
+    if (
+      error?.name ===
+      "ZodError"
+    ) {
+      return ApiResponse.error(
+        "Datos inválidos.",
+        400,
+        error.issues
+      );
+    }
+
+    if (
+      error instanceof Error
+    ) {
+      const businessErrors = [
+        "El establecimiento no existe.",
+        "El establecimiento no está activo.",
+        "La zona no existe.",
+        "La zona no pertenece al establecimiento indicado.",
+        "La zona no está activa.",
+      ];
+
+      if (
+        businessErrors.includes(
+          error.message
+        )
+      ) {
+        return ApiResponse.error(
+          error.message,
+          400
+        );
+      }
+
+      if (
+        error.message ===
+        "Ya existe una mesa con ese código en este establecimiento."
+      ) {
+        return ApiResponse.error(
+          error.message,
+          409
+        );
+      }
+    }
+
+    return ApiResponse.error(
+      "Error creando mesa.",
+      500
     );
   }
 }
