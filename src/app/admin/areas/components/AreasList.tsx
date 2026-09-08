@@ -419,7 +419,7 @@ export default function AreasList() {
   ) {
     if (
       !window.confirm(
-        "¿Desactivar esta área?"
+        "¿Eliminar esta área definitivamente?"
       )
     ) {
       return;
@@ -446,7 +446,7 @@ export default function AreasList() {
       ) {
         setError(
           json.error ||
-            "No se pudo desactivar el área."
+            "No se pudo eliminar el área."
         );
 
         return;
@@ -460,7 +460,7 @@ export default function AreasList() {
       );
 
       setError(
-        "No se pudo desactivar el área."
+        "No se pudo eliminar el área."
       );
     }
   }
@@ -839,7 +839,7 @@ export default function AreasList() {
                         area.id
                       )
                     }
-                    aria-label="Desactivar área"
+                    aria-label="Eliminar área"
                   >
                     <Trash2
                       size={

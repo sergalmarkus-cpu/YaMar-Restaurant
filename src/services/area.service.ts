@@ -10,12 +10,24 @@ import {
 
 import {
   areas,
+  tables,
 } from "@/db/schema";
 
 import type {
   AreaCreateInput,
   AreaUpdateInput,
 } from "@/validations/area.validation";
+
+export class AreaHasTablesError extends Error {
+  constructor() {
+    super(
+      "AREA_HAS_TABLES"
+    );
+
+    this.name =
+      "AreaHasTablesError";
+  }
+}
 
 export class AreaService {
   /*
@@ -262,6 +274,9 @@ export class AreaService {
    * ==========================================================
    * DESACTIVAR ÁREA
    * ==========================================================
+   *
+   * Se mantiene para los flujos que necesiten
+   * una desactivación lógica.
    */
 
   static async deactivateForEstablishment(
@@ -295,6 +310,114 @@ export class AreaService {
     return (
       updated[0] ??
       null
+    );
+  }
+
+  /*
+   * ==========================================================
+   * ELIMINAR ÁREA
+   * ==========================================================
+   *
+   * Una zona solo puede eliminarse físicamente
+   * cuando no tiene mesas asociadas.
+   *
+   * La comprobación incluye establishmentId para
+   * mantener el aislamiento multi-tenant.
+   */
+
+  static async deleteForEstablishment(
+    id: number,
+    establishmentId: number
+  ) {
+    return db.transaction(
+      async (
+        tx
+      ) => {
+        const existing =
+          await tx
+            .select({
+              id:
+                areas.id,
+            })
+            .from(
+              areas
+            )
+            .where(
+              and(
+                eq(
+                  areas.id,
+                  id
+                ),
+
+                eq(
+                  areas.establishmentId,
+                  establishmentId
+                )
+              )
+            )
+            .limit(1);
+
+        if (
+          !existing[0]
+        ) {
+          return null;
+        }
+
+        const linkedTables =
+          await tx
+            .select({
+              id:
+                tables.id,
+            })
+            .from(
+              tables
+            )
+            .where(
+              and(
+                eq(
+                  tables.areaId,
+                  id
+                ),
+
+                eq(
+                  tables.establishmentId,
+                  establishmentId
+                )
+              )
+            )
+            .limit(1);
+
+        if (
+          linkedTables[0]
+        ) {
+          throw new AreaHasTablesError();
+        }
+
+        const deleted =
+          await tx
+            .delete(
+              areas
+            )
+            .where(
+              and(
+                eq(
+                  areas.id,
+                  id
+                ),
+
+                eq(
+                  areas.establishmentId,
+                  establishmentId
+                )
+              )
+            )
+            .returning();
+
+        return (
+          deleted[0] ??
+          null
+        );
+      }
     );
   }
 }

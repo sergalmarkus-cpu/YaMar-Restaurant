@@ -12,6 +12,7 @@ import {
 } from "@/validations/area.validation";
 
 import {
+  AreaHasTablesError,
   AreaService,
 } from "@/services/area.service";
 
@@ -304,7 +305,7 @@ export async function DELETE(
       )
     ) {
       return ApiResponse.error(
-        "No tienes permiso para desactivar áreas.",
+        "No tienes permiso para eliminar áreas.",
         403
       );
     }
@@ -330,7 +331,7 @@ export async function DELETE(
 
     const area =
       await AreaService
-        .deactivateForEstablishment(
+        .deleteForEstablishment(
           id,
           authUser.establishmentId
         );
@@ -346,13 +347,13 @@ export async function DELETE(
 
     return ApiResponse.success(
       area,
-      "Área desactivada correctamente."
+      "Área eliminada correctamente."
     );
   } catch (
     error
   ) {
     Logger.error(
-      "Error desactivando área.",
+      "Error eliminando área.",
       error
     );
 
@@ -367,8 +368,18 @@ export async function DELETE(
       return authResponse;
     }
 
+    if (
+      error instanceof
+      AreaHasTablesError
+    ) {
+      return ApiResponse.error(
+        "No se puede eliminar el área porque tiene mesas asociadas. Mueve o elimina primero esas mesas.",
+        409
+      );
+    }
+
     return ApiResponse.error(
-      "Error desactivando área.",
+      "Error eliminando área.",
       500
     );
   }
