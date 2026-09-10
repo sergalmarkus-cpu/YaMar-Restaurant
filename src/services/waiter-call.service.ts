@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import {
   establishments,
+  notifications,
   sessions,
   tables,
   users,
@@ -63,21 +64,42 @@ export class WaiterCallService {
       throw new Error("SESSION_TABLE_ESTABLISHMENT_MISMATCH");
     }
 
-    const [call] = await db
-      .insert(waiterCalls)
-      .values({
-        sessionId: session.id,
-        tableId: session.tableId,
-        establishmentId: session.establishmentId,
-        type: input.type,
-        message: input.message,
-        latitude: input.latitude ?? session.latitude,
-        longitude: input.longitude ?? session.longitude,
-        status: "pending",
-      })
-      .returning();
+    return await db.transaction(async (tx) => {
+      const [call] = await tx
+        .insert(waiterCalls)
+        .values({
+          sessionId: session.id,
+          tableId: session.tableId,
+          establishmentId: session.establishmentId,
+          type: input.type,
+          message: input.message,
+          latitude: input.latitude ?? session.latitude,
+          longitude: input.longitude ?? session.longitude,
+          status: "pending",
+        })
+        .returning();
 
-    return call;
+      await tx
+        .insert(notifications)
+        .values({
+          establishmentId: session.establishmentId,
+          userId: null,
+          type: "waiter_call",
+          title: "Llamada de mesa",
+          message: `La mesa ${session.tableId} solicita atención: ${input.type}.`,
+          data: {
+            waiterCallId: call.id,
+            sessionId: call.sessionId,
+            tableId: call.tableId,
+            callType: call.type,
+            message: call.message,
+            status: call.status,
+          },
+          read: false,
+        });
+
+      return call;
+    });
   }
 
   static async getBySession(sessionId: string) {

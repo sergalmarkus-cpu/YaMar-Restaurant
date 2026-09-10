@@ -6,6 +6,7 @@ import {
   products,
   modifiers,
   sessions,
+  notifications,
 } from "@/db/schema";
 
 import {
@@ -632,6 +633,62 @@ export class OrderService {
               )
             );
         }
+
+        /*
+         * ======================================================
+         * CREAR NOTIFICACIÓN: NUEVO PEDIDO
+         * ======================================================
+         *
+         * Se crea dentro de la misma transacción que el pedido,
+         * sus items y la actualización de stock.
+         *
+         * Así evitamos:
+         * - pedidos confirmados sin notificación;
+         * - notificaciones de pedidos que finalmente hagan rollback.
+         */
+
+        await tx
+          .insert(
+            notifications
+          )
+          .values({
+            establishmentId,
+
+            userId:
+              null,
+
+            type:
+              "new_order",
+
+            title:
+              "Nuevo pedido",
+
+            message:
+              `Nuevo pedido ${created.orderNumber} en mesa ${created.tableId}.`,
+
+            data: {
+              orderId:
+                created.id,
+
+              orderNumber:
+                created.orderNumber,
+
+              sessionId:
+                created.sessionId,
+
+              tableId:
+                created.tableId,
+
+              total:
+                created.total,
+
+              status:
+                created.status,
+            },
+
+            read:
+              false,
+          });
 
         return created;
       }

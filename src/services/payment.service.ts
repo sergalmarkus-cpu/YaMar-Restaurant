@@ -14,6 +14,7 @@ import {
   sessions,
   billSplits,
   orders,
+  notifications,
 } from "@/db/schema";
 
 import {
@@ -1382,7 +1383,7 @@ return {
               )
               .returning();
 
-          const updatedPayment =
+                    const updatedPayment =
             updated[0] ??
             null;
 
@@ -1390,6 +1391,70 @@ return {
             !updatedPayment
           ) {
             return null;
+          }
+
+          /*
+           * ==================================================
+           * NOTIFICACIÓN: PAGO RECIBIDO
+           * ==================================================
+           *
+           * Solo se genera cuando el pago cambia realmente
+           * a "paid".
+           *
+           * La notificación forma parte de la misma transacción
+           * financiera que confirma el pago.
+           *
+           * Gracias a la comprobación de idempotencia anterior,
+           * un webhook repetido de Stripe no genera una segunda
+           * notificación.
+           */
+
+          if (
+            status ===
+            "paid"
+          ) {
+            await tx
+              .insert(
+                notifications
+              )
+              .values({
+                establishmentId,
+
+                userId:
+                  null,
+
+                type:
+                  "payment_received",
+
+                title:
+                  "Pago recibido",
+
+                message:
+                  `Pago de ${updatedPayment.amount} recibido.`,
+
+                data: {
+                  paymentId:
+                    updatedPayment.id,
+
+                  sessionId:
+                    updatedPayment.sessionId,
+
+                  billSplitId:
+                    updatedPayment.billSplitId,
+
+                  amount:
+                    updatedPayment.amount,
+
+                  method:
+                    updatedPayment.method,
+
+                  status:
+                    updatedPayment.status,
+                },
+
+                read:
+                  false,
+              });
           }
 
           return {

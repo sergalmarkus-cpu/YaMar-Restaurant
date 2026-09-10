@@ -8,6 +8,7 @@ import { db } from "@/db";
 
 import {
   establishments,
+  notifications,
   orders,
   ratings,
   sessions,
@@ -131,36 +132,99 @@ export class RatingService {
       );
     }
 
-    const [rating] = await db
-      .insert(ratings)
-      .values({
-        sessionId:
-          data.sessionId,
+    return await db.transaction(
+      async (
+        tx
+      ) => {
+        const [rating] = await tx
+          .insert(ratings)
+          .values({
+            sessionId:
+              data.sessionId,
 
-        establishmentId:
-          session.establishmentId,
+            establishmentId:
+              session.establishmentId,
 
-        foodRating:
-          data.foodRating,
+            foodRating:
+              data.foodRating,
 
-        serviceRating:
-          data.serviceRating,
+            serviceRating:
+              data.serviceRating,
 
-        attentionRating:
-          data.attentionRating,
+            attentionRating:
+              data.attentionRating,
 
-        comment:
-          data.comment,
+            comment:
+              data.comment,
 
-        photos:
-          data.photos,
+            photos:
+              data.photos,
 
-        approved:
-          false,
-      })
-      .returning();
+            approved:
+              false,
+          })
+          .returning();
 
-    return rating;
+        /*
+         * ======================================================
+         * NOTIFICACIÓN: NUEVA VALORACIÓN
+         * ======================================================
+         *
+         * La valoración y su notificación se crean dentro
+         * de la misma transacción.
+         *
+         * Así evitamos:
+         * - valoraciones creadas sin notificación;
+         * - notificaciones de valoraciones que hagan rollback.
+         */
+
+        await tx
+          .insert(
+            notifications
+          )
+          .values({
+            establishmentId:
+              session.establishmentId,
+
+            userId:
+              null,
+
+            type:
+              "new_rating",
+
+            title:
+              "Nueva valoración",
+
+            message:
+              "Se ha recibido una nueva valoración de un cliente.",
+
+            data: {
+              ratingId:
+                rating.id,
+
+              sessionId:
+                rating.sessionId,
+
+              foodRating:
+                rating.foodRating,
+
+              serviceRating:
+                rating.serviceRating,
+
+              attentionRating:
+                rating.attentionRating,
+
+              approved:
+                rating.approved,
+            },
+
+            read:
+              false,
+          });
+
+        return rating;
+      }
+    );
   }
 
   /*
