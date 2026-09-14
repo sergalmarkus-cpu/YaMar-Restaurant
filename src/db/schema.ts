@@ -528,6 +528,69 @@ export const pointsOfSale = pgTable("points_of_sale", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Staff Shifts
+//
+// Planificación de jornadas del personal.
+// Este módulo gestiona turnos programados; no representa todavía
+// un sistema de fichaje, asistencia, nóminas o control horario legal.
+export const staffShifts = pgTable("staff_shifts", {
+  id: serial("id").primaryKey(),
+
+  establishmentId:
+    integer("establishment_id")
+      .references(() => establishments.id)
+      .notNull(),
+
+  userId:
+    integer("user_id")
+      .references(() => users.id)
+      .notNull(),
+
+  startAt:
+    timestamp("start_at", {
+      withTimezone: true,
+    }).notNull(),
+
+  endAt:
+    timestamp("end_at", {
+      withTimezone: true,
+    }).notNull(),
+
+  status:
+    varchar("status", {
+      length: 20,
+      enum: [
+        "scheduled",
+        "completed",
+        "cancelled",
+      ],
+    })
+      .default("scheduled")
+      .notNull(),
+
+  notes:
+    text("notes"),
+
+  createdBy:
+    integer("created_by")
+      .references(() => users.id)
+      .notNull(),
+
+  createdAt:
+    timestamp("created_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+
+  updatedAt:
+    timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .defaultNow()
+      .notNull(),
+});
+
 // Relations
 export const establishmentsRelations = relations(establishments, ({ many }) => ({
   users: many(users),

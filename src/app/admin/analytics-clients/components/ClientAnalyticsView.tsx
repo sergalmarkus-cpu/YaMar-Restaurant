@@ -27,8 +27,20 @@ import type {
 } from "lucide-react";
 
 import {
+  ADMIN_CLIENT_ANALYTICS_MESSAGES,
+} from "@/config/admin-client-analytics-i18n";
+
+import {
+  ADMIN_LANGUAGE_LOCALES,
+} from "@/config/admin-languages";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 import ClientAnalyticsChart from "./ClientAnalyticsChart";
 
@@ -80,31 +92,46 @@ interface ClientAnalyticsResponse {
     repeatRate: number;
   };
 
-  daily: ClientAnalyticsDay[];
+  daily:
+    ClientAnalyticsDay[];
 
-  topCustomers: TopCustomer[];
+  topCustomers:
+    TopCustomer[];
 }
 
 interface MetricCardProps {
   title: string;
-  value: string | number;
+  value:
+    string |
+    number;
   subtitle?: string;
   icon: LucideIcon;
 }
 
 function formatMoney(
   value: number,
-  currency: string
+  currency: string,
+  locale: string
 ) {
+  if (!currency) {
+    return new Intl.NumberFormat(
+      locale,
+      {
+        maximumFractionDigits:
+          2,
+      }
+    ).format(
+      value
+    );
+  }
+
   try {
     return new Intl.NumberFormat(
-      "es-ES",
+      locale,
       {
         style:
           "currency",
-
         currency,
-
         maximumFractionDigits:
           2,
       }
@@ -112,24 +139,59 @@ function formatMoney(
       value
     );
   } catch {
-    return `${value.toFixed(
-      2
-    )} ${currency}`;
+    return `${new Intl.NumberFormat(
+      locale,
+      {
+        minimumFractionDigits:
+          2,
+        maximumFractionDigits:
+          2,
+      }
+    ).format(value)} ${currency}`;
   }
 }
 
 function formatNumber(
   value: number,
+  locale: string,
   maximumFractionDigits =
     2
 ) {
   return new Intl.NumberFormat(
-    "es-ES",
+    locale,
     {
       maximumFractionDigits,
     }
   ).format(
     value
+  );
+}
+
+function formatDate(
+  value: string,
+  locale: string
+) {
+  const date =
+    new Date(
+      `${value}T00:00:00`
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    locale,
+    {
+      dateStyle:
+        "medium",
+    }
+  ).format(
+    date
   );
 }
 
@@ -167,11 +229,8 @@ function MetricCard({
 }: MetricCardProps) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
       <div className="flex items-start justify-between gap-4">
-
         <div className="min-w-0">
-
           <p className="text-sm font-medium text-slate-500">
             {title}
           </p>
@@ -185,7 +244,6 @@ function MetricCard({
               {subtitle}
             </p>
           )}
-
         </div>
 
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
@@ -193,14 +251,30 @@ function MetricCard({
             size={21}
           />
         </div>
-
       </div>
-
     </div>
   );
 }
 
 export default function ClientAnalyticsView() {
+  const language =
+    useAdminLanguageStore(
+      (
+        state
+      ) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_CLIENT_ANALYTICS_MESSAGES[
+      language
+    ];
+
+  const locale =
+    ADMIN_LANGUAGE_LOCALES[
+      language
+    ];
+
   const [
     period,
     setPeriod,
@@ -216,33 +290,25 @@ export default function ClientAnalyticsView() {
     useState<
       ClientAnalyticsResponse |
       null
-    >(
-      null
-    );
+    >(null);
 
   const [
     loading,
     setLoading,
   ] =
-    useState(
-      true
-    );
+    useState(true);
 
   const [
     refreshing,
     setRefreshing,
   ] =
-    useState(
-      false
-    );
+    useState(false);
 
   const [
     error,
     setError,
   ] =
-    useState(
-      ""
-    );
+    useState("");
 
   const loadAnalytics =
     useCallback(
@@ -252,9 +318,7 @@ export default function ClientAnalyticsView() {
         manualRefresh =
           false
       ) => {
-        setError(
-          ""
-        );
+        setError("");
 
         if (
           manualRefresh
@@ -282,8 +346,7 @@ export default function ClientAnalyticsView() {
             !json.success
           ) {
             setError(
-              json.error ||
-                "No se pudieron cargar las analíticas de clientes."
+              messages.loadError
             );
 
             return;
@@ -294,15 +357,15 @@ export default function ClientAnalyticsView() {
               ClientAnalyticsResponse
           );
         } catch (
-          error
+          loadError
         ) {
           console.error(
             "Error loading client analytics:",
-            error
+            loadError
           );
 
           setError(
-            "No se pudieron cargar las analíticas de clientes."
+            messages.loadError
           );
         } finally {
           setLoading(
@@ -314,7 +377,9 @@ export default function ClientAnalyticsView() {
           );
         }
       },
-      []
+      [
+        messages.loadError,
+      ]
     );
 
   useEffect(
@@ -331,8 +396,10 @@ export default function ClientAnalyticsView() {
 
   const currency =
     data?.establishment
-      .currency ??
-    "EUR";
+      .currency
+      ?.trim()
+      .toUpperCase() ??
+    "";
 
   const periodLabel =
     useMemo(
@@ -341,19 +408,23 @@ export default function ClientAnalyticsView() {
           period ===
           7
         ) {
-          return "Últimos 7 días";
+          return messages.period
+            .last7;
         }
 
         if (
           period ===
           90
         ) {
-          return "Últimos 90 días";
+          return messages.period
+            .last90;
         }
 
-        return "Últimos 30 días";
+        return messages.period
+          .last30;
       },
       [
+        messages.period,
         period,
       ]
     );
@@ -364,43 +435,42 @@ export default function ClientAnalyticsView() {
   ) {
     return (
       <div className="flex min-h-[350px] items-center justify-center">
-
         <div className="flex items-center gap-3 text-slate-600">
-
           <Loader2
             size={22}
             className="animate-spin"
           />
 
           <span>
-            Cargando analíticas...
+            {
+              messages.loading
+            }
           </span>
-
         </div>
-
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
         <div>
-
           <h1 className="text-3xl font-bold text-slate-900">
-            Analíticas de clientes
+            {
+              messages.page
+                .title
+            }
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Consulta las visitas, la captación, la recurrencia y el comportamiento de tus clientes.
+            {
+              messages.page
+                .subtitle
+            }
           </p>
-
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-
           {(
             [
               7,
@@ -432,7 +502,11 @@ export default function ClientAnalyticsView() {
                       : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
-                  {value} días
+                  {
+                    messages.page.days(
+                      value
+                    )
+                  }
                 </button>
               );
             }
@@ -460,11 +534,13 @@ export default function ClientAnalyticsView() {
               }
             />
 
-            Actualizar
+            {refreshing
+              ? messages.page
+                  .refreshing
+              : messages.page
+                  .refresh}
           </button>
-
         </div>
-
       </div>
 
       {error && (
@@ -475,247 +551,361 @@ export default function ClientAnalyticsView() {
 
       {data && (
         <>
-
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
               <div className="flex items-center gap-3">
-
                 <CalendarDays
                   size={20}
                   className="text-indigo-600"
                 />
 
                 <div>
-
                   <p className="font-medium text-slate-900">
-                    {periodLabel}
+                    {
+                      periodLabel
+                    }
                   </p>
 
                   <p className="text-sm text-slate-500">
-                    {data.period.from}
-                    {" "}
-                    →
-                    {" "}
-                    {data.period.to}
+                    {formatDate(
+                      data.period.from,
+                      locale
+                    )}
+                    {" → "}
+                    {formatDate(
+                      data.period.to,
+                      locale
+                    )}
                   </p>
-
                 </div>
-
               </div>
 
               <div className="text-sm text-slate-500">
-                Zona horaria:
-                {" "}
+                {
+                  messages.period
+                    .timezone
+                }
+                :{" "}
+
                 <span className="font-medium text-slate-700">
-                  {data.establishment.timezone}
+                  {
+                    data.establishment
+                      .timezone
+                  }
                 </span>
               </div>
-
             </div>
-
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-
             <MetricCard
-              title="Clientes únicos"
-              value={
-                data.summary.uniqueCustomers
+              title={
+                messages.metrics
+                  .uniqueCustomers
               }
-              subtitle="Clientes distintos durante el período"
+              value={
+                data.summary
+                  .uniqueCustomers
+              }
+              subtitle={
+                messages.metrics
+                  .uniqueCustomersSubtitle
+              }
               icon={
                 Users
               }
             />
 
             <MetricCard
-              title="Clientes nuevos"
-              value={
-                data.summary.newCustomers
+              title={
+                messages.metrics
+                  .newCustomers
               }
-              subtitle="Primera visita registrada en el período"
+              value={
+                data.summary
+                  .newCustomers
+              }
+              subtitle={
+                messages.metrics
+                  .newCustomersSubtitle
+              }
               icon={
                 UserPlus
               }
             />
 
             <MetricCard
-              title="Clientes recurrentes"
-              value={
-                data.summary.returningCustomers
+              title={
+                messages.metrics
+                  .returningCustomers
               }
-              subtitle="Ya habían visitado el establecimiento"
+              value={
+                data.summary
+                  .returningCustomers
+              }
+              subtitle={
+                messages.metrics
+                  .returningCustomersSubtitle
+              }
               icon={
                 Repeat2
               }
             />
 
             <MetricCard
-              title="Visitas"
-              value={
-                data.summary.totalVisits
+              title={
+                messages.metrics
+                  .visits
               }
-              subtitle="Sesiones registradas durante el período"
+              value={
+                data.summary
+                  .totalVisits
+              }
+              subtitle={
+                messages.metrics
+                  .visitsSubtitle
+              }
               icon={
                 Eye
               }
             />
 
             <MetricCard
-              title="Clientes identificados"
-              value={
-                data.summary.identifiedCustomers
+              title={
+                messages.metrics
+                  .identifiedCustomers
               }
-              subtitle="Clientes con identidad reconocible"
+              value={
+                data.summary
+                  .identifiedCustomers
+              }
+              subtitle={
+                messages.metrics
+                  .identifiedCustomersSubtitle
+              }
               icon={
                 Contact
               }
             />
 
             <MetricCard
-              title="Clientes anónimos"
-              value={
-                data.summary.anonymousCustomers
+              title={
+                messages.metrics
+                  .anonymousCustomers
               }
-              subtitle="Sesiones sin identificación de cliente"
+              value={
+                data.summary
+                  .anonymousCustomers
+              }
+              subtitle={
+                messages.metrics
+                  .anonymousCustomersSubtitle
+              }
               icon={
                 UsersRound
               }
             />
 
             <MetricCard
-              title="Clientes pagadores"
-              value={
-                data.summary.payingCustomers
+              title={
+                messages.metrics
+                  .payingCustomers
               }
-              subtitle="Clientes con al menos un pago completado"
+              value={
+                data.summary
+                  .payingCustomers
+              }
+              subtitle={
+                messages.metrics
+                  .payingCustomersSubtitle
+              }
               icon={
                 UserCheck
               }
             />
 
             <MetricCard
-              title="Facturación asociada"
+              title={
+                messages.metrics
+                  .associatedRevenue
+              }
               value={
                 formatMoney(
-                  data.summary.totalRevenue,
-                  currency
+                  data.summary
+                    .totalRevenue,
+                  currency,
+                  locale
                 )
               }
-              subtitle="Pagos cobrados de clientes del período"
+              subtitle={
+                messages.metrics
+                  .associatedRevenueSubtitle
+              }
               icon={
                 CircleDollarSign
               }
             />
-
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-
             <div className="xl:col-span-2">
-
               <ClientAnalyticsChart
                 data={
                   data.daily
                 }
+                locale={
+                  locale
+                }
+                title={
+                  messages.chart
+                    .title
+                }
+                subtitle={
+                  messages.chart
+                    .subtitle
+                }
+                visitsLabel={
+                  messages.chart
+                    .visits
+                }
+                customersLabel={
+                  messages.chart
+                    .customers
+                }
+                newCustomersLabel={
+                  messages.chart
+                    .newCustomers
+                }
+                returningCustomersLabel={
+                  messages.chart
+                    .returningCustomers
+                }
               />
-
             </div>
 
             <div className="space-y-4">
-
               <MetricCard
-                title="Gasto medio"
+                title={
+                  messages.metrics
+                    .averageSpend
+                }
                 value={
                   formatMoney(
-                    data.summary.averageSpendPerCustomer,
-                    currency
+                    data.summary
+                      .averageSpendPerCustomer,
+                    currency,
+                    locale
                   )
                 }
-                subtitle="Importe medio por cliente pagador"
+                subtitle={
+                  messages.metrics
+                    .averageSpendSubtitle
+                }
                 icon={
                   WalletCards
                 }
               />
 
               <MetricCard
-                title="Visitas medias"
+                title={
+                  messages.metrics
+                    .averageVisits
+                }
                 value={
                   formatNumber(
-                    data.summary.averageVisitsPerCustomer
+                    data.summary
+                      .averageVisitsPerCustomer,
+                    locale
                   )
                 }
-                subtitle="Visitas por cliente único"
+                subtitle={
+                  messages.metrics
+                    .averageVisitsSubtitle
+                }
                 icon={
                   Eye
                 }
               />
 
               <MetricCard
-                title="Tasa de repetición"
+                title={
+                  messages.metrics
+                    .repeatRate
+                }
                 value={`${formatNumber(
-                  data.summary.repeatRate
+                  data.summary
+                    .repeatRate,
+                  locale
                 )} %`}
-                subtitle="Porcentaje de clientes recurrentes"
+                subtitle={
+                  messages.metrics
+                    .repeatRateSubtitle
+                }
                 icon={
                   Repeat2
                 }
               />
-
             </div>
-
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-
             <div className="border-b border-slate-200 px-6 py-5">
-
               <h2 className="font-semibold text-slate-900">
-                Clientes destacados
+                {
+                  messages.topCustomers
+                    .title
+                }
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Clientes identificados ordenados por importe pagado y número de visitas.
+                {
+                  messages.topCustomers
+                    .subtitle
+                }
               </p>
-
             </div>
 
             {data.topCustomers.length ===
             0 ? (
               <div className="px-6 py-10 text-center text-sm text-slate-500">
-                Todavía no hay clientes identificados suficientes para mostrar este ranking.
+                {
+                  messages.topCustomers
+                    .empty
+                }
               </div>
             ) : (
               <div className="overflow-x-auto">
-
                 <table className="min-w-full divide-y divide-slate-200">
-
                   <thead className="bg-slate-50">
                     <tr>
-
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                         #
                       </th>
 
                       <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Cliente
+                        {
+                          messages.topCustomers
+                            .customer
+                        }
                       </th>
 
                       <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Visitas
+                        {
+                          messages.topCustomers
+                            .visits
+                        }
                       </th>
 
                       <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        Importe pagado
+                        {
+                          messages.topCustomers
+                            .amountPaid
+                        }
                       </th>
-
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-slate-100">
-
                     {data.topCustomers.map(
                       (
                         customer,
@@ -727,7 +917,6 @@ export default function ClientAnalyticsView() {
                           }
                           className="transition hover:bg-slate-50"
                         >
-
                           <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500">
                             {
                               index +
@@ -750,73 +939,80 @@ export default function ClientAnalyticsView() {
                           </td>
 
                           <td className="whitespace-nowrap px-6 py-4 text-right text-sm font-medium text-slate-900">
-                            {
-                              formatMoney(
-                                customer.totalPaid,
-                                currency
-                              )
-                            }
+                            {formatMoney(
+                              customer.totalPaid,
+                              currency,
+                              locale
+                            )}
                           </td>
-
                         </tr>
                       )
                     )}
-
                   </tbody>
-
                 </table>
-
               </div>
             )}
-
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-
             <div className="border-b border-slate-200 px-6 py-5">
-
               <h2 className="font-semibold text-slate-900">
-                Detalle diario
+                {
+                  messages.daily
+                    .title
+                }
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Desglose diario de visitas, clientes nuevos y clientes recurrentes.
+                {
+                  messages.daily
+                    .subtitle
+                }
               </p>
-
             </div>
 
             <div className="overflow-x-auto">
-
               <table className="min-w-full divide-y divide-slate-200">
-
                 <thead className="bg-slate-50">
                   <tr>
-
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Fecha
+                      {
+                        messages.daily
+                          .date
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Visitas
+                      {
+                        messages.daily
+                          .visits
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Clientes
+                      {
+                        messages.daily
+                          .customers
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Nuevos
+                      {
+                        messages.daily
+                          .newCustomers
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Recurrentes
+                      {
+                        messages.daily
+                          .returningCustomers
+                      }
                     </th>
-
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-
                   {data.daily.map(
                     (
                       day
@@ -827,11 +1023,11 @@ export default function ClientAnalyticsView() {
                         }
                         className="transition hover:bg-slate-50"
                       >
-
                         <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
-                          {
-                            day.label
-                          }
+                          {formatDate(
+                            day.date,
+                            locale
+                          )}
                         </td>
 
                         <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-slate-700">
@@ -857,22 +1053,15 @@ export default function ClientAnalyticsView() {
                             day.returningCustomers
                           }
                         </td>
-
                       </tr>
                     )
                   )}
-
                 </tbody>
-
               </table>
-
             </div>
-
           </div>
-
         </>
       )}
-
     </div>
   );
 }

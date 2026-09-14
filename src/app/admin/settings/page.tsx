@@ -20,12 +20,20 @@ import {
 } from "lucide-react";
 
 import {
+  useAdminAuthStore,
+} from "@/auth/admin-auth.store";
+
+import {
+  ADMIN_SETTINGS_MESSAGES,
+} from "@/config/admin-settings-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
 
 import {
-  useAdminAuthStore,
-} from "@/auth/admin-auth.store";
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface EstablishmentFeatures {
   geolocation: boolean;
@@ -41,51 +49,21 @@ interface EstablishmentRecord {
   id: number;
   name: string;
   slug: string;
-
-  description:
-    string | null;
-
-  address:
-    string | null;
-
-  phone:
-    string | null;
-
-  email:
-    string | null;
-
-  latitude:
-    string | null;
-
-  longitude:
-    string | null;
-
-  maxDeliveryDistance:
-    number | null;
-
-  geoFenceEnabled:
-    boolean | null;
-
-  logo:
-    string | null;
-
-  primaryColor:
-    string | null;
-
-  secondaryColor:
-    string | null;
-
-  currency:
-    string | null;
-
-  timezone:
-    string | null;
-
-  features:
-    Partial<EstablishmentFeatures> | null;
-
-  active:
-    boolean | null;
+  description: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  latitude: string | null;
+  longitude: string | null;
+  maxDeliveryDistance: number | null;
+  geoFenceEnabled: boolean | null;
+  logo: string | null;
+  primaryColor: string | null;
+  secondaryColor: string | null;
+  currency: string | null;
+  timezone: string | null;
+  features: Partial<EstablishmentFeatures> | null;
+  active: boolean | null;
 }
 
 interface FormState {
@@ -126,28 +104,20 @@ const EMPTY_FORM: FormState = {
   email: "",
   latitude: "",
   longitude: "",
-  maxDeliveryDistance:
-    "100",
-  geoFenceEnabled:
-    false,
+  maxDeliveryDistance: "100",
+  geoFenceEnabled: false,
   logo: "",
-  primaryColor:
-    "#000000",
-  secondaryColor:
-    "#ffffff",
-  currency:
-    "EUR",
-  timezone:
-    "Europe/Madrid",
+  primaryColor: "#000000",
+  secondaryColor: "#ffffff",
+  currency: "EUR",
+  timezone: "Europe/Madrid",
   features: {
     ...DEFAULT_FEATURES,
   },
 };
 
 function normalizeFeatures(
-  value:
-    Partial<EstablishmentFeatures> |
-    null
+  value: Partial<EstablishmentFeatures> | null
 ): EstablishmentFeatures {
   return {
     geolocation:
@@ -181,8 +151,7 @@ function normalizeFeatures(
 }
 
 function toForm(
-  establishment:
-    EstablishmentRecord
+  establishment: EstablishmentRecord
 ): FormState {
   return {
     name:
@@ -219,14 +188,12 @@ function toForm(
 
     maxDeliveryDistance:
       String(
-        establishment
-          .maxDeliveryDistance ??
+        establishment.maxDeliveryDistance ??
           100
       ),
 
     geoFenceEnabled:
-      establishment
-        .geoFenceEnabled ??
+      establishment.geoFenceEnabled ??
       false,
 
     logo:
@@ -234,13 +201,11 @@ function toForm(
       "",
 
     primaryColor:
-      establishment
-        .primaryColor ??
+      establishment.primaryColor ??
       "#000000",
 
     secondaryColor:
-      establishment
-        .secondaryColor ??
+      establishment.secondaryColor ??
       "#ffffff",
 
     currency:
@@ -261,8 +226,7 @@ function toForm(
 function FieldLabel({
   children,
 }: {
-  children:
-    React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
     <label className="mb-2 block text-sm font-medium text-slate-700">
@@ -276,12 +240,9 @@ function SectionHeader({
   title,
   description,
 }: {
-  icon:
-    React.ReactNode;
-  title:
-    string;
-  description:
-    string;
+  icon: React.ReactNode;
+  title: string;
+  description: string;
 }) {
   return (
     <div className="mb-6 flex items-start gap-3">
@@ -309,14 +270,10 @@ function FeatureToggle({
   disabled,
   onChange,
 }: {
-  title:
-    string;
-  description:
-    string;
-  checked:
-    boolean;
-  disabled:
-    boolean;
+  title: string;
+  description: string;
+  checked: boolean;
+  disabled: boolean;
   onChange: (
     checked: boolean
   ) => void;
@@ -335,18 +292,11 @@ function FeatureToggle({
 
       <input
         type="checkbox"
-        checked={
-          checked
-        }
-        disabled={
-          disabled
-        }
-        onChange={(
-          event
-        ) =>
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) =>
           onChange(
-            event.target
-              .checked
+            event.target.checked
           )
         }
         className="h-5 w-5 accent-indigo-600"
@@ -362,13 +312,23 @@ export default function SettingsPage() {
         state.user
     );
 
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_SETTINGS_MESSAGES[
+      language
+    ];
+
   const [
     establishment,
     setEstablishment,
   ] =
     useState<
-      EstablishmentRecord |
-      null
+      EstablishmentRecord | null
     >(null);
 
   const [
@@ -410,18 +370,21 @@ export default function SettingsPage() {
     user?.role ===
     "admin";
 
+  function currentMessages() {
+    return ADMIN_SETTINGS_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
+
   useEffect(() => {
     void loadSettings();
   }, []);
 
   async function loadSettings() {
-    setLoading(
-      true
-    );
-
-    setError(
-      ""
-    );
+    setLoading(true);
+    setError("");
 
     try {
       const response =
@@ -437,8 +400,8 @@ export default function SettingsPage() {
         !json.success
       ) {
         setError(
-          json.error ||
-            "No se pudo cargar la configuración."
+          currentMessages()
+            .loadError
         );
 
         return;
@@ -453,7 +416,8 @@ export default function SettingsPage() {
 
       if (!current) {
         setError(
-          "No se encontró el establecimiento asociado a tu cuenta."
+          currentMessages()
+            .noEstablishment
         );
 
         return;
@@ -480,7 +444,8 @@ export default function SettingsPage() {
       );
 
       setError(
-        "No se pudo cargar la configuración."
+        currentMessages()
+          .loadError
       );
     } finally {
       setLoading(
@@ -520,7 +485,6 @@ export default function SettingsPage() {
 
         features: {
           ...current.features,
-
           [key]:
             value,
         },
@@ -541,17 +505,12 @@ export default function SettingsPage() {
       return;
     }
 
-    setSaving(
-      true
-    );
+    const activeMessages =
+      currentMessages();
 
-    setError(
-      ""
-    );
-
-    setSuccess(
-      ""
-    );
+    setSaving(true);
+    setError("");
+    setSuccess("");
 
     try {
       const latitude =
@@ -569,11 +528,11 @@ export default function SettingsPage() {
         !Number.isInteger(
           maxDeliveryDistance
         ) ||
-        maxDeliveryDistance <=
-          0
+        maxDeliveryDistance <= 0
       ) {
         setError(
-          "La distancia máxima debe ser un número entero mayor que cero."
+          activeMessages
+            .invalidMaxDistance
         );
 
         return;
@@ -673,8 +632,8 @@ export default function SettingsPage() {
         !json.success
       ) {
         setError(
-          json.error ||
-            "No se pudo guardar la configuración."
+          activeMessages
+            .saveError
         );
 
         return;
@@ -694,7 +653,8 @@ export default function SettingsPage() {
       );
 
       setSuccess(
-        "Configuración guardada correctamente."
+        activeMessages
+          .saveSuccess
       );
     } catch (
       error
@@ -705,7 +665,8 @@ export default function SettingsPage() {
       );
 
       setError(
-        "No se pudo guardar la configuración."
+        activeMessages
+          .saveError
       );
     } finally {
       setSaving(
@@ -719,7 +680,7 @@ export default function SettingsPage() {
   ) {
     return (
       <div className="p-6 text-slate-500">
-        Cargando configuración...
+        {messages.loading}
       </div>
     );
   }
@@ -731,17 +692,17 @@ export default function SettingsPage() {
       <div className="space-y-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            Configuración
+            {messages.title}
           </h1>
 
           <p className="mt-1 text-slate-500">
-            Configuración general del establecimiento.
+            {messages.loadError}
           </p>
         </div>
 
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
           {error ||
-            "No se pudo cargar el establecimiento."}
+            messages.loadError}
         </div>
       </div>
     );
@@ -758,19 +719,17 @@ export default function SettingsPage() {
         <div>
           <div className="flex items-center gap-3">
             <Settings
-              size={
-                28
-              }
+              size={28}
               className="text-indigo-600"
             />
 
             <h1 className="text-2xl font-bold text-slate-900">
-              Configuración
+              {messages.title}
             </h1>
           </div>
 
           <p className="mt-2 text-slate-500">
-            Configuración general de{" "}
+            {messages.subtitlePrefix}{" "}
             <span className="font-medium text-slate-700">
               {
                 establishment.name
@@ -789,8 +748,8 @@ export default function SettingsPage() {
             }`}
           >
             {establishment.active
-              ? "Establecimiento activo"
-              : "Establecimiento inactivo"}
+              ? messages.establishmentActive
+              : messages.establishmentInactive}
           </span>
 
           <button
@@ -802,14 +761,12 @@ export default function SettingsPage() {
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Save
-              size={
-                17
-              }
+              size={17}
             />
 
             {saving
-              ? "Guardando..."
-              : "Guardar cambios"}
+              ? messages.saving
+              : messages.saveChanges}
           </button>
         </div>
       </div>
@@ -817,14 +774,14 @@ export default function SettingsPage() {
       {!canEdit && (
         <div className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <ShieldCheck
-            size={
-              20
-            }
+            size={20}
             className="mt-0.5 shrink-0"
           />
 
           <div>
-            Puedes consultar la configuración, pero solo un administrador puede modificarla.
+            {
+              messages.readOnlyNotice
+            }
           </div>
         </div>
       )}
@@ -838,9 +795,7 @@ export default function SettingsPage() {
       {success && (
         <div className="flex items-center gap-2 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
           <CheckCircle2
-            size={
-              18
-            }
+            size={18}
           />
 
           {success}
@@ -851,19 +806,21 @@ export default function SettingsPage() {
         <SectionHeader
           icon={
             <Building2
-              size={
-                20
-              }
+              size={20}
             />
           }
-          title="Información general"
-          description="Datos públicos e identificativos del establecimiento."
+          title={
+            messages.generalTitle
+          }
+          description={
+            messages.generalDescription
+          }
         />
 
         <div className="grid gap-5 md:grid-cols-2">
           <div>
             <FieldLabel>
-              Nombre
+              {messages.name}
             </FieldLabel>
 
             <input
@@ -873,13 +830,10 @@ export default function SettingsPage() {
               disabled={
                 !canEdit
               }
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "name",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -888,7 +842,7 @@ export default function SettingsPage() {
 
           <div>
             <FieldLabel>
-              Slug
+              {messages.slug}
             </FieldLabel>
 
             <input
@@ -898,13 +852,10 @@ export default function SettingsPage() {
               disabled={
                 !canEdit
               }
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "slug",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -913,7 +864,7 @@ export default function SettingsPage() {
 
           <div className="md:col-span-2">
             <FieldLabel>
-              Descripción
+              {messages.description}
             </FieldLabel>
 
             <textarea
@@ -923,16 +874,11 @@ export default function SettingsPage() {
               disabled={
                 !canEdit
               }
-              rows={
-                3
-              }
-              onChange={(
-                event
-              ) =>
+              rows={3}
+              onChange={(event) =>
                 updateField(
                   "description",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full resize-none rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -941,7 +887,7 @@ export default function SettingsPage() {
 
           <div>
             <FieldLabel>
-              Teléfono
+              {messages.phone}
             </FieldLabel>
 
             <input
@@ -951,13 +897,10 @@ export default function SettingsPage() {
               disabled={
                 !canEdit
               }
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "phone",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -966,7 +909,7 @@ export default function SettingsPage() {
 
           <div>
             <FieldLabel>
-              Email
+              {messages.email}
             </FieldLabel>
 
             <input
@@ -977,13 +920,10 @@ export default function SettingsPage() {
               disabled={
                 !canEdit
               }
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "email",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -992,7 +932,7 @@ export default function SettingsPage() {
 
           <div className="md:col-span-2">
             <FieldLabel>
-              Dirección
+              {messages.address}
             </FieldLabel>
 
             <input
@@ -1002,13 +942,10 @@ export default function SettingsPage() {
               disabled={
                 !canEdit
               }
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "address",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -1017,7 +954,7 @@ export default function SettingsPage() {
 
           <div className="md:col-span-2">
             <FieldLabel>
-              URL del logotipo
+              {messages.logoUrl}
             </FieldLabel>
 
             <input
@@ -1028,13 +965,10 @@ export default function SettingsPage() {
                 !canEdit
               }
               placeholder="https://..."
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "logo",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -1047,19 +981,21 @@ export default function SettingsPage() {
         <SectionHeader
           icon={
             <MapPin
-              size={
-                20
-              }
+              size={20}
             />
           }
-          title="Ubicación y geovalla"
-          description="Coordenadas y distancia máxima permitida alrededor del establecimiento."
+          title={
+            messages.locationTitle
+          }
+          description={
+            messages.locationDescription
+          }
         />
 
         <div className="grid gap-5 md:grid-cols-3">
           <div>
             <FieldLabel>
-              Latitud
+              {messages.latitude}
             </FieldLabel>
 
             <input
@@ -1071,13 +1007,10 @@ export default function SettingsPage() {
               disabled={
                 !canEdit
               }
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "latitude",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -1086,7 +1019,7 @@ export default function SettingsPage() {
 
           <div>
             <FieldLabel>
-              Longitud
+              {messages.longitude}
             </FieldLabel>
 
             <input
@@ -1098,13 +1031,10 @@ export default function SettingsPage() {
               disabled={
                 !canEdit
               }
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "longitude",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -1113,30 +1043,23 @@ export default function SettingsPage() {
 
           <div>
             <FieldLabel>
-              Distancia máxima (m)
+              {messages.maxDistance}
             </FieldLabel>
 
             <input
               type="number"
-              min={
-                1
-              }
-              max={
-                100000
-              }
+              min={1}
+              max={100000}
               value={
                 form.maxDeliveryDistance
               }
               disabled={
                 !canEdit
               }
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "maxDeliveryDistance",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -1147,11 +1070,15 @@ export default function SettingsPage() {
         <label className="mt-5 flex items-center justify-between gap-6 rounded-xl border border-slate-200 p-4">
           <div>
             <p className="font-medium text-slate-900">
-              Activar geovalla
+              {
+                messages.geofenceTitle
+              }
             </p>
 
             <p className="mt-1 text-sm text-slate-500">
-              Limita determinadas operaciones a clientes situados dentro del radio configurado.
+              {
+                messages.geofenceDescription
+              }
             </p>
           </div>
 
@@ -1163,13 +1090,10 @@ export default function SettingsPage() {
             disabled={
               !canEdit
             }
-            onChange={(
-              event
-            ) =>
+            onChange={(event) =>
               updateField(
                 "geoFenceEnabled",
-                event.target
-                  .checked
+                event.target.checked
               )
             }
             className="h-5 w-5 accent-indigo-600"
@@ -1181,39 +1105,35 @@ export default function SettingsPage() {
         <SectionHeader
           icon={
             <Globe2
-              size={
-                20
-              }
+              size={20}
             />
           }
-          title="Localización"
-          description="Moneda y zona horaria utilizadas por el establecimiento."
+          title={
+            messages.localizationTitle
+          }
+          description={
+            messages.localizationDescription
+          }
         />
 
         <div className="grid gap-5 md:grid-cols-2">
           <div>
             <FieldLabel>
-              Moneda
+              {messages.currency}
             </FieldLabel>
 
             <input
               value={
                 form.currency
               }
-              maxLength={
-                3
-              }
+              maxLength={3}
               disabled={
                 !canEdit
               }
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "currency",
-                  event.target
-                    .value
-                    .toUpperCase()
+                  event.target.value.toUpperCase()
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 uppercase disabled:bg-slate-50"
@@ -1222,7 +1142,7 @@ export default function SettingsPage() {
 
           <div>
             <FieldLabel>
-              Zona horaria
+              {messages.timezone}
             </FieldLabel>
 
             <input
@@ -1233,13 +1153,10 @@ export default function SettingsPage() {
                 !canEdit
               }
               placeholder="Europe/Madrid"
-              onChange={(
-                event
-              ) =>
+              onChange={(event) =>
                 updateField(
                   "timezone",
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -1252,19 +1169,21 @@ export default function SettingsPage() {
         <SectionHeader
           icon={
             <Palette
-              size={
-                20
-              }
+              size={20}
             />
           }
-          title="Identidad visual"
-          description="Colores principales utilizados por la experiencia del cliente."
+          title={
+            messages.visualTitle
+          }
+          description={
+            messages.visualDescription
+          }
         />
 
         <div className="grid gap-5 md:grid-cols-2">
           <div>
             <FieldLabel>
-              Color primario
+              {messages.primaryColor}
             </FieldLabel>
 
             <div className="flex gap-3">
@@ -1276,13 +1195,10 @@ export default function SettingsPage() {
                 disabled={
                   !canEdit
                 }
-                onChange={(
-                  event
-                ) =>
+                onChange={(event) =>
                   updateField(
                     "primaryColor",
-                    event.target
-                      .value
+                    event.target.value
                   )
                 }
                 className="h-11 w-14 rounded-lg border border-slate-300 bg-white p-1"
@@ -1295,13 +1211,10 @@ export default function SettingsPage() {
                 disabled={
                   !canEdit
                 }
-                onChange={(
-                  event
-                ) =>
+                onChange={(event) =>
                   updateField(
                     "primaryColor",
-                    event.target
-                      .value
+                    event.target.value
                   )
                 }
                 className="flex-1 rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -1311,7 +1224,7 @@ export default function SettingsPage() {
 
           <div>
             <FieldLabel>
-              Color secundario
+              {messages.secondaryColor}
             </FieldLabel>
 
             <div className="flex gap-3">
@@ -1323,13 +1236,10 @@ export default function SettingsPage() {
                 disabled={
                   !canEdit
                 }
-                onChange={(
-                  event
-                ) =>
+                onChange={(event) =>
                   updateField(
                     "secondaryColor",
-                    event.target
-                      .value
+                    event.target.value
                   )
                 }
                 className="h-11 w-14 rounded-lg border border-slate-300 bg-white p-1"
@@ -1342,13 +1252,10 @@ export default function SettingsPage() {
                 disabled={
                   !canEdit
                 }
-                onChange={(
-                  event
-                ) =>
+                onChange={(event) =>
                   updateField(
                     "secondaryColor",
-                    event.target
-                      .value
+                    event.target.value
                   )
                 }
                 className="flex-1 rounded-lg border border-slate-300 px-3 py-2.5 disabled:bg-slate-50"
@@ -1362,29 +1269,32 @@ export default function SettingsPage() {
         <SectionHeader
           icon={
             <ShieldCheck
-              size={
-                20
-              }
+              size={20}
             />
           }
-          title="Funciones del establecimiento"
-          description="Activa o desactiva módulos disponibles para clientes y personal."
+          title={
+            messages.featuresTitle
+          }
+          description={
+            messages.featuresDescription
+          }
         />
 
         <div className="grid gap-4 lg:grid-cols-2">
           <FeatureToggle
-            title="Geolocalización"
-            description="Permite usar la posición del cliente."
+            title={
+              messages.geolocationTitle
+            }
+            description={
+              messages.geolocationDescription
+            }
             checked={
-              form.features
-                .geolocation
+              form.features.geolocation
             }
             disabled={
               !canEdit
             }
-            onChange={(
-              value
-            ) =>
+            onChange={(value) =>
               updateFeature(
                 "geolocation",
                 value
@@ -1393,18 +1303,19 @@ export default function SettingsPage() {
           />
 
           <FeatureToggle
-            title="Pago online"
-            description="Permite pagos digitales desde la aplicación."
+            title={
+              messages.onlinePaymentTitle
+            }
+            description={
+              messages.onlinePaymentDescription
+            }
             checked={
-              form.features
-                .onlinePayment
+              form.features.onlinePayment
             }
             disabled={
               !canEdit
             }
-            onChange={(
-              value
-            ) =>
+            onChange={(value) =>
               updateFeature(
                 "onlinePayment",
                 value
@@ -1413,18 +1324,19 @@ export default function SettingsPage() {
           />
 
           <FeatureToggle
-            title="División de cuenta"
-            description="Permite dividir una cuenta entre varios clientes."
+            title={
+              messages.splitBillTitle
+            }
+            description={
+              messages.splitBillDescription
+            }
             checked={
-              form.features
-                .splitBill
+              form.features.splitBill
             }
             disabled={
               !canEdit
             }
-            onChange={(
-              value
-            ) =>
+            onChange={(value) =>
               updateFeature(
                 "splitBill",
                 value
@@ -1433,18 +1345,19 @@ export default function SettingsPage() {
           />
 
           <FeatureToggle
-            title="Valoraciones"
-            description="Permite registrar puntuaciones y comentarios."
+            title={
+              messages.ratingsTitle
+            }
+            description={
+              messages.ratingsDescription
+            }
             checked={
-              form.features
-                .ratings
+              form.features.ratings
             }
             disabled={
               !canEdit
             }
-            onChange={(
-              value
-            ) =>
+            onChange={(value) =>
               updateFeature(
                 "ratings",
                 value
@@ -1453,18 +1366,19 @@ export default function SettingsPage() {
           />
 
           <FeatureToggle
-            title="Fidelización"
-            description="Activa el sistema de puntos para clientes."
+            title={
+              messages.loyaltyTitle
+            }
+            description={
+              messages.loyaltyDescription
+            }
             checked={
-              form.features
-                .loyalty
+              form.features.loyalty
             }
             disabled={
               !canEdit
             }
-            onChange={(
-              value
-            ) =>
+            onChange={(value) =>
               updateFeature(
                 "loyalty",
                 value
@@ -1473,18 +1387,19 @@ export default function SettingsPage() {
           />
 
           <FeatureToggle
-            title="Reservas"
-            description="Habilita funciones relacionadas con reservas."
+            title={
+              messages.reservationsTitle
+            }
+            description={
+              messages.reservationsDescription
+            }
             checked={
-              form.features
-                .reservations
+              form.features.reservations
             }
             disabled={
               !canEdit
             }
-            onChange={(
-              value
-            ) =>
+            onChange={(value) =>
               updateFeature(
                 "reservations",
                 value
@@ -1493,18 +1408,19 @@ export default function SettingsPage() {
           />
 
           <FeatureToggle
-            title="Llamar al camarero"
-            description="Permite solicitar asistencia desde la mesa."
+            title={
+              messages.callWaiterTitle
+            }
+            description={
+              messages.callWaiterDescription
+            }
             checked={
-              form.features
-                .callWaiter
+              form.features.callWaiter
             }
             disabled={
               !canEdit
             }
-            onChange={(
-              value
-            ) =>
+            onChange={(value) =>
               updateFeature(
                 "callWaiter",
                 value
@@ -1517,33 +1433,27 @@ export default function SettingsPage() {
       <section className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-5">
           <CreditCard
-            size={
-              22
-            }
+            size={22}
             className="text-indigo-600"
           />
 
           <p className="mt-3 text-sm text-slate-500">
-            Moneda
+            {messages.currency}
           </p>
 
           <p className="mt-1 text-lg font-semibold text-slate-900">
-            {
-              form.currency
-            }
+            {form.currency}
           </p>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-5">
           <Users
-            size={
-              22
-            }
+            size={22}
             className="text-indigo-600"
           />
 
           <p className="mt-3 text-sm text-slate-500">
-            Tenant
+            {messages.tenant}
           </p>
 
           <p className="mt-1 text-lg font-semibold text-slate-900">
@@ -1553,21 +1463,20 @@ export default function SettingsPage() {
 
         <div className="rounded-xl border border-slate-200 bg-white p-5">
           <Star
-            size={
-              22
-            }
+            size={22}
             className="text-indigo-600"
           />
 
           <p className="mt-3 text-sm text-slate-500">
-            Fidelización
+            {
+              messages.loyaltyTitle
+            }
           </p>
 
           <p className="mt-1 text-lg font-semibold text-slate-900">
-            {form.features
-              .loyalty
-              ? "Activa"
-              : "Desactivada"}
+            {form.features.loyalty
+              ? messages.enabled
+              : messages.disabled}
           </p>
         </div>
       </section>

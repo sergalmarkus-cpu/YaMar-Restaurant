@@ -23,22 +23,34 @@ import {
 } from "lucide-react";
 
 import {
+  ADMIN_LANGUAGE_LOCALES,
+} from "@/config/admin-languages";
+
+import {
+  ADMIN_PAYMENTS_MESSAGES,
+  type AdminPaymentMethod,
+  type AdminPaymentStatus,
+} from "@/config/admin-payments-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
 
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
 type PaymentStatus =
-  | "pending"
-  | "partial"
-  | "paid"
-  | "refunded";
+  AdminPaymentStatus;
+
+type PaymentActionStatus =
+  Exclude<
+    PaymentStatus,
+    "pending"
+  >;
 
 type PaymentMethod =
-  | "card"
-  | "cash"
-  | "transfer"
-  | "paypal"
-  | "apple_pay"
-  | "google_pay";
+  AdminPaymentMethod;
 
 interface PaymentRecord {
   id: number;
@@ -56,6 +68,11 @@ interface PaymentRecord {
   updatedAt: string;
 }
 
+interface ApiEstablishment {
+  id: number;
+  currency?: string | null;
+}
+
 interface MetricCardProps {
   title: string;
   value: string | number;
@@ -63,64 +80,20 @@ interface MetricCardProps {
   icon: typeof CreditCard;
 }
 
-const STATUS_OPTIONS: Array<{
-  value: "all" | PaymentStatus;
-  label: string;
-}> = [
-  {
-    value: "all",
-    label: "Todos los estados",
-  },
-  {
-    value: "pending",
-    label: "Pendientes",
-  },
-  {
-    value: "partial",
-    label: "Parciales",
-  },
-  {
-    value: "paid",
-    label: "Pagados",
-  },
-  {
-    value: "refunded",
-    label: "Reembolsados",
-  },
+const STATUS_VALUES: PaymentStatus[] = [
+  "pending",
+  "partial",
+  "paid",
+  "refunded",
 ];
 
-const METHOD_OPTIONS: Array<{
-  value: "all" | PaymentMethod;
-  label: string;
-}> = [
-  {
-    value: "all",
-    label: "Todos los métodos",
-  },
-  {
-    value: "card",
-    label: "Tarjeta",
-  },
-  {
-    value: "cash",
-    label: "Efectivo",
-  },
-  {
-    value: "transfer",
-    label: "Transferencia",
-  },
-  {
-    value: "paypal",
-    label: "PayPal",
-  },
-  {
-    value: "apple_pay",
-    label: "Apple Pay",
-  },
-  {
-    value: "google_pay",
-    label: "Google Pay",
-  },
+const METHOD_VALUES: PaymentMethod[] = [
+  "card",
+  "cash",
+  "transfer",
+  "paypal",
+  "apple_pay",
+  "google_pay",
 ];
 
 function MetricCard({
@@ -155,12 +128,12 @@ function MetricCard({
 }
 
 function formatAmount(
-  value: string | number
+  value: string | number,
+  locale: string,
+  currency: string
 ) {
   const number =
-    Number(
-      value
-    );
+    Number(value);
 
   if (
     !Number.isFinite(
@@ -170,27 +143,42 @@ function formatAmount(
     return "—";
   }
 
+  if (currency) {
+    try {
+      return new Intl.NumberFormat(
+        locale,
+        {
+          style: "currency",
+          currency,
+          minimumFractionDigits:
+            2,
+          maximumFractionDigits:
+            2,
+        }
+      ).format(number);
+    } catch {
+      // Si el código de moneda almacenado fuese inválido,
+      // usamos el formato numérico seguro de respaldo.
+    }
+  }
+
   return new Intl.NumberFormat(
-    "es-ES",
+    locale,
     {
       minimumFractionDigits:
         2,
-
       maximumFractionDigits:
         2,
     }
-  ).format(
-    number
-  );
+  ).format(number);
 }
 
 function formatDate(
-  value: string
+  value: string,
+  locale: string
 ) {
   const date =
-    new Date(
-      value
-    );
+    new Date(value);
 
   if (
     Number.isNaN(
@@ -201,54 +189,18 @@ function formatDate(
   }
 
   return new Intl.DateTimeFormat(
-    "es-ES",
+    locale,
     {
-      dateStyle:
-        "short",
-
-      timeStyle:
-        "short",
+      dateStyle: "short",
+      timeStyle: "short",
     }
-  ).format(
-    date
-  );
-}
-
-function getMethodLabel(
-  method: PaymentMethod
-) {
-  switch (
-    method
-  ) {
-    case "card":
-      return "Tarjeta";
-
-    case "cash":
-      return "Efectivo";
-
-    case "transfer":
-      return "Transferencia";
-
-    case "paypal":
-      return "PayPal";
-
-    case "apple_pay":
-      return "Apple Pay";
-
-    case "google_pay":
-      return "Google Pay";
-
-    default:
-      return method;
-  }
+  ).format(date);
 }
 
 function getMethodIcon(
   method: PaymentMethod
 ) {
-  switch (
-    method
-  ) {
+  switch (method) {
     case "cash":
       return Banknote;
 
@@ -264,37 +216,12 @@ function getMethodIcon(
   }
 }
 
-function getStatusLabel(
-  status:
-    PaymentStatus |
-    null
-) {
-  switch (
-    status
-  ) {
-    case "paid":
-      return "Pagado";
-
-    case "partial":
-      return "Parcial";
-
-    case "refunded":
-      return "Reembolsado";
-
-    case "pending":
-    default:
-      return "Pendiente";
-  }
-}
-
 function getStatusClass(
   status:
     PaymentStatus |
     null
 ) {
-  switch (
-    status
-  ) {
+  switch (status) {
     case "paid":
       return "bg-emerald-50 text-emerald-700 ring-emerald-600/20";
 
@@ -314,14 +241,12 @@ function getAllowedNextStatuses(
   status:
     PaymentStatus |
     null
-): PaymentStatus[] {
+): PaymentActionStatus[] {
   const current =
     status ??
     "pending";
 
-  switch (
-    current
-  ) {
+  switch (current) {
     case "pending":
       return [
         "partial",
@@ -345,27 +270,23 @@ function getAllowedNextStatuses(
   }
 }
 
-function getActionLabel(
-  status: PaymentStatus
-) {
-  switch (
-    status
-  ) {
-    case "paid":
-      return "Marcar pagado";
-
-    case "partial":
-      return "Marcar parcial";
-
-    case "refunded":
-      return "Reembolsar";
-
-    default:
-      return status;
-  }
-}
-
 export default function PaymentsManager() {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_PAYMENTS_MESSAGES[
+      language
+    ].payments;
+
+  const locale =
+    ADMIN_LANGUAGE_LOCALES[
+      language
+    ];
+
   const [
     payments,
     setPayments,
@@ -373,6 +294,12 @@ export default function PaymentsManager() {
     useState<
       PaymentRecord[]
     >([]);
+
+  const [
+    currency,
+    setCurrency,
+  ] =
+    useState("");
 
   const [
     loading,
@@ -452,21 +379,37 @@ export default function PaymentsManager() {
         }
 
         try {
-          const response =
-            await adminFetch(
-              "/api/payments"
-            );
+          const [
+            paymentsResponse,
+            establishmentsResponse,
+          ] =
+            await Promise.all([
+              adminFetch(
+                "/api/payments"
+              ),
+              adminFetch(
+                "/api/establishments"
+              ),
+            ]);
 
-          const json =
-            await response.json();
+          const [
+            paymentsJson,
+            establishmentsJson,
+          ] =
+            await Promise.all([
+              paymentsResponse.json(),
+              establishmentsResponse.json(),
+            ]);
 
           if (
-            !response.ok ||
-            !json.success
+            !paymentsResponse.ok ||
+            !paymentsJson.success
           ) {
             setError(
-              json.error ||
-                "No se pudieron cargar los cobros."
+              paymentsJson.error ||
+                paymentsJson.message ||
+                messages.errors
+                  .load
             );
 
             return;
@@ -474,10 +417,10 @@ export default function PaymentsManager() {
 
           const rows =
             Array.isArray(
-              json.data
+              paymentsJson.data
             )
               ? (
-                  json.data as
+                  paymentsJson.data as
                     PaymentRecord[]
                 )
               : [];
@@ -498,6 +441,28 @@ export default function PaymentsManager() {
           setPayments(
             rows
           );
+
+          if (
+            establishmentsResponse.ok &&
+            establishmentsJson.success &&
+            Array.isArray(
+              establishmentsJson.data
+            )
+          ) {
+            const establishments:
+              ApiEstablishment[] =
+                establishmentsJson.data;
+
+            const current =
+              establishments[0];
+
+            setCurrency(
+              current?.currency
+                ?.trim()
+                .toUpperCase() ??
+                ""
+            );
+          }
         } catch (
           loadError
         ) {
@@ -507,7 +472,8 @@ export default function PaymentsManager() {
           );
 
           setError(
-            "No se pudieron cargar los cobros."
+            messages.errors
+              .load
           );
         } finally {
           setLoading(
@@ -519,17 +485,15 @@ export default function PaymentsManager() {
           );
         }
       },
-      []
+      [
+        messages.errors
+          .load,
+      ]
     );
 
-  useEffect(
-    () => {
-      void loadPayments();
-    },
-    [
-      loadPayments,
-    ]
-  );
+  useEffect(() => {
+    void loadPayments();
+  }, [loadPayments]);
 
   const filteredPayments =
     useMemo(
@@ -581,7 +545,13 @@ export default function PaymentsManager() {
               payment.stripePaymentIntentId ??
                 "",
               payment.method,
+              messages.methods[
+                payment.method
+              ],
               effectiveStatus,
+              messages.statuses[
+                effectiveStatus
+              ],
               String(
                 payment.billSplitId ??
                   ""
@@ -601,6 +571,8 @@ export default function PaymentsManager() {
       },
       [
         methodFilter,
+        messages.methods,
+        messages.statuses,
         payments,
         search,
         statusFilter,
@@ -691,12 +663,20 @@ export default function PaymentsManager() {
     const confirmationMessage =
       status ===
       "refunded"
-        ? `¿Confirmas que quieres marcar el pago #${payment.id} como reembolsado?`
-        : `¿Confirmas el cambio del pago #${payment.id} de "${getStatusLabel(
-            currentStatus
-          )}" a "${getStatusLabel(
-            status
-          )}"?`;
+        ? messages.confirmations
+            .refund(
+              payment.id
+            )
+        : messages.confirmations
+            .statusChange(
+              payment.id,
+              messages.statuses[
+                currentStatus
+              ],
+              messages.statuses[
+                status
+              ]
+            );
 
     if (
       typeof window !==
@@ -712,13 +692,8 @@ export default function PaymentsManager() {
       payment.id
     );
 
-    setError(
-      ""
-    );
-
-    setSuccess(
-      ""
-    );
+    setError("");
+    setSuccess("");
 
     try {
       const response =
@@ -749,7 +724,9 @@ export default function PaymentsManager() {
       ) {
         setError(
           json.error ||
-            "No se pudo actualizar el estado del pago."
+            json.message ||
+            messages.errors
+              .update
         );
 
         return;
@@ -775,7 +752,10 @@ export default function PaymentsManager() {
       );
 
       setSuccess(
-        `Pago #${payment.id} actualizado correctamente.`
+        messages.success
+          .updated(
+            payment.id
+          )
       );
     } catch (
       updateError
@@ -786,7 +766,8 @@ export default function PaymentsManager() {
       );
 
       setError(
-        "No se pudo actualizar el estado del pago."
+        messages.errors
+          .update
       );
     } finally {
       setUpdatingId(
@@ -807,7 +788,9 @@ export default function PaymentsManager() {
           />
 
           <span>
-            Cargando cobros...
+            {
+              messages.loading
+            }
           </span>
         </div>
       </div>
@@ -816,16 +799,20 @@ export default function PaymentsManager() {
 
   return (
     <div className="space-y-6">
-
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-
         <div>
           <h1 className="text-3xl font-bold text-slate-900">
-            Cobros
+            {
+              messages.page
+                .title
+            }
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Consulta y gestiona los pagos registrados en el establecimiento.
+            {
+              messages.page
+                .subtitle
+            }
           </p>
         </div>
 
@@ -850,9 +837,12 @@ export default function PaymentsManager() {
             }
           />
 
-          Actualizar
+          {refreshing
+            ? messages.page
+                .refreshing
+            : messages.page
+                .refresh}
         </button>
-
       </div>
 
       {error && (
@@ -872,61 +862,87 @@ export default function PaymentsManager() {
       )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-
         <MetricCard
-          title="Cobros registrados"
+          title={
+            messages.stats
+              .registered
+          }
           value={
             payments.length
           }
-          subtitle="Todos los estados"
+          subtitle={
+            messages.stats
+              .allStatuses
+          }
           icon={
             CreditCard
           }
         />
 
         <MetricCard
-          title="Importe cobrado"
+          title={
+            messages.stats
+              .collected
+          }
           value={
             formatAmount(
-              totalPaid
+              totalPaid,
+              locale,
+              currency
             )
           }
-          subtitle={`${paidCount} pagos completados`}
+          subtitle={
+            messages.stats
+              .paidCount(
+                paidCount
+              )
+          }
           icon={
             CheckCircle2
           }
         />
 
         <MetricCard
-          title="Importe pendiente"
+          title={
+            messages.stats
+              .pendingAmount
+          }
           value={
             formatAmount(
-              totalPending
+              totalPending,
+              locale,
+              currency
             )
           }
-          subtitle="Pagos pendientes o parciales"
+          subtitle={
+            messages.stats
+              .pendingDescription
+          }
           icon={
             Clock3
           }
         />
 
         <MetricCard
-          title="Reembolsos"
+          title={
+            messages.stats
+              .refunds
+          }
           value={
             refundedCount
           }
-          subtitle="Pagos marcados como reembolsados"
+          subtitle={
+            messages.stats
+              .refundsDescription
+          }
           icon={
             RotateCcw
           }
         />
-
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_220px]">
-
           <div className="relative">
             <Search
               size={18}
@@ -944,7 +960,10 @@ export default function PaymentsManager() {
                   event.target.value
                 )
               }
-              placeholder="Buscar por ID, sesión o transacción..."
+              placeholder={
+                messages.filters
+                  .search
+              }
               className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
             />
           </div>
@@ -957,27 +976,37 @@ export default function PaymentsManager() {
               event
             ) =>
               setStatusFilter(
-                event.target.value as
-                  "all" |
-                  PaymentStatus
+                event.target
+                  .value as
+                  | "all"
+                  | PaymentStatus
               )
             }
             className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           >
-            {STATUS_OPTIONS.map(
+            <option value="all">
+              {
+                messages.filters
+                  .allStatuses
+              }
+            </option>
+
+            {STATUS_VALUES.map(
               (
-                option
+                status
               ) => (
                 <option
                   key={
-                    option.value
+                    status
                   }
                   value={
-                    option.value
+                    status
                   }
                 >
                   {
-                    option.label
+                    messages.statuses[
+                      status
+                    ]
                   }
                 </option>
               )
@@ -992,112 +1021,151 @@ export default function PaymentsManager() {
               event
             ) =>
               setMethodFilter(
-                event.target.value as
-                  "all" |
-                  PaymentMethod
+                event.target
+                  .value as
+                  | "all"
+                  | PaymentMethod
               )
             }
             className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           >
-            {METHOD_OPTIONS.map(
+            <option value="all">
+              {
+                messages.filters
+                  .allMethods
+              }
+            </option>
+
+            {METHOD_VALUES.map(
               (
-                option
+                method
               ) => (
                 <option
                   key={
-                    option.value
+                    method
                   }
                   value={
-                    option.value
+                    method
                   }
                 >
                   {
-                    option.label
+                    messages.methods[
+                      method
+                    ]
                   }
                 </option>
               )
             )}
           </select>
-
         </div>
 
         <p className="mt-3 text-xs text-slate-500">
-          {filteredPayments.length} de {payments.length} cobros visibles.
+          {
+            messages.filters
+              .visible(
+                filteredPayments.length,
+                payments.length
+              )
+          }
         </p>
-
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-
         <div className="border-b border-slate-200 px-6 py-5">
           <h2 className="font-semibold text-slate-900">
-            Historial de cobros
+            {
+              messages.history
+                .title
+            }
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Los registros más recientes aparecen primero.
+            {
+              messages.history
+                .subtitle
+            }
           </p>
         </div>
 
         {filteredPayments.length ===
         0 ? (
           <div className="px-6 py-14 text-center">
-
             <ReceiptText
               size={34}
               className="mx-auto text-slate-300"
             />
 
             <p className="mt-4 font-medium text-slate-700">
-              No se encontraron cobros
+              {
+                messages.empty
+                  .title
+              }
             </p>
 
             <p className="mt-1 text-sm text-slate-500">
-              Cambia los filtros o espera a que se registre un nuevo pago.
+              {
+                messages.empty
+                  .description
+              }
             </p>
-
           </div>
         ) : (
           <div className="overflow-x-auto">
-
             <table className="min-w-full divide-y divide-slate-200">
-
               <thead className="bg-slate-50">
                 <tr>
-
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Pago
+                    {
+                      messages.table
+                        .payment
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Método
+                    {
+                      messages.table
+                        .method
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Importe
+                    {
+                      messages.table
+                        .amount
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Estado
+                    {
+                      messages.table
+                        .status
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Fecha
+                    {
+                      messages.table
+                        .date
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Referencia
+                    {
+                      messages.table
+                        .reference
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Acciones
+                    {
+                      messages.table
+                        .actions
+                    }
                   </th>
-
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100">
-
                 {filteredPayments.map(
                   (
                     payment
@@ -1116,6 +1184,10 @@ export default function PaymentsManager() {
                       updatingId ===
                       payment.id;
 
+                    const effectiveStatus =
+                      payment.status ??
+                      "pending";
+
                     return (
                       <tr
                         key={
@@ -1123,9 +1195,7 @@ export default function PaymentsManager() {
                         }
                         className="align-top transition hover:bg-slate-50"
                       >
-
                         <td className="px-5 py-4">
-
                           <p className="font-semibold text-slate-900">
                             #{payment.id}
                           </p>
@@ -1136,7 +1206,11 @@ export default function PaymentsManager() {
                               payment.sessionId
                             }
                           >
-                            Sesión:{" "}
+                            {
+                              messages.table
+                                .session
+                            }
+                            :{" "}
                             {
                               payment.sessionId
                             }
@@ -1144,14 +1218,16 @@ export default function PaymentsManager() {
 
                           {payment.billSplitId && (
                             <p className="mt-1 text-xs text-slate-500">
-                              División #{payment.billSplitId}
+                              {
+                                messages.table
+                                  .split
+                              }{" "}
+                              #{payment.billSplitId}
                             </p>
                           )}
-
                         </td>
 
                         <td className="px-5 py-4">
-
                           <div className="flex items-center gap-2 text-sm text-slate-700">
                             <MethodIcon
                               size={17}
@@ -1159,56 +1235,52 @@ export default function PaymentsManager() {
                             />
 
                             {
-                              getMethodLabel(
+                              messages.methods[
                                 payment.method
-                              )
+                              ]
                             }
                           </div>
-
                         </td>
 
                         <td className="whitespace-nowrap px-5 py-4 text-right">
-
                           <span className="font-semibold text-slate-900">
-                            {
-                              formatAmount(
-                                payment.amount
-                              )
-                            }
+                            {formatAmount(
+                              payment.amount,
+                              locale,
+                              currency
+                            )}
                           </span>
-
                         </td>
 
                         <td className="px-5 py-4">
-
                           <span
                             className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ${getStatusClass(
                               payment.status
                             )}`}
                           >
                             {
-                              getStatusLabel(
-                                payment.status
-                              )
+                              messages.statuses[
+                                effectiveStatus
+                              ]
                             }
                           </span>
-
                         </td>
 
                         <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
-                          {
-                            formatDate(
-                              payment.createdAt
-                            )
-                          }
+                          {formatDate(
+                            payment.createdAt,
+                            locale
+                          )}
                         </td>
 
                         <td className="px-5 py-4">
-
                           {payment.transactionId ? (
                             <div>
                               <p className="text-xs font-medium text-slate-700">
-                                Transacción
+                                {
+                                  messages.table
+                                    .transaction
+                                }
                               </p>
 
                               <p
@@ -1254,20 +1326,20 @@ export default function PaymentsManager() {
                               rel="noreferrer"
                               className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-700"
                             >
-                              Recibo
+                              {
+                                messages.table
+                                  .receipt
+                              }
 
                               <ExternalLink
                                 size={13}
                               />
                             </a>
                           )}
-
                         </td>
 
                         <td className="px-5 py-4">
-
                           <div className="flex min-w-[155px] flex-col items-end gap-2">
-
                             {isUpdating ? (
                               <div className="inline-flex items-center gap-2 text-sm text-slate-500">
                                 <Loader2
@@ -1275,7 +1347,10 @@ export default function PaymentsManager() {
                                   className="animate-spin"
                                 />
 
-                                Actualizando...
+                                {
+                                  messages.table
+                                    .updating
+                                }
                               </div>
                             ) : nextStatuses.length >
                               0 ? (
@@ -1300,42 +1375,37 @@ export default function PaymentsManager() {
                                         ? "border border-red-200 bg-white text-red-600 hover:bg-red-50"
                                         : nextStatus ===
                                           "paid"
-                                        ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                                        : "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                                          ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                                          : "border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
                                     }`}
                                   >
                                     {
-                                      getActionLabel(
+                                      messages.actions[
                                         nextStatus
-                                      )
+                                      ]
                                     }
                                   </button>
                                 )
                               )
                             ) : (
                               <span className="text-xs text-slate-400">
-                                Sin acciones
+                                {
+                                  messages.table
+                                    .noActions
+                                }
                               </span>
                             )}
-
                           </div>
-
                         </td>
-
                       </tr>
                     );
                   }
                 )}
-
               </tbody>
-
             </table>
-
           </div>
         )}
-
       </div>
-
     </div>
   );
 }

@@ -12,8 +12,16 @@ import {
 } from "lucide-react";
 
 import {
+  ADMIN_ESTABLISHMENTS_MESSAGES,
+} from "@/config/admin-establishments-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Establishment {
   id: number;
@@ -26,47 +34,77 @@ interface Establishment {
 }
 
 export default function EstablishmentsList() {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_ESTABLISHMENTS_MESSAGES[
+      language
+    ];
+
   const [
     establishments,
     setEstablishments,
   ] =
-    useState<Establishment[]>([]);
+    useState<Establishment[]>(
+      []
+    );
 
   const [
     loading,
     setLoading,
   ] =
-    useState(true);
+    useState(
+      true
+    );
 
   const [
     error,
     setError,
   ] =
-    useState("");
+    useState(
+      ""
+    );
 
-  useEffect(() => {
-    void loadEstablishments();
-  }, []);
+  function currentMessages() {
+    return ADMIN_ESTABLISHMENTS_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
+
+  useEffect(
+    () => {
+      void loadEstablishments();
+    },
+    []
+  );
 
   async function loadEstablishments() {
-    setError("");
+    setError(
+      ""
+    );
 
     try {
-      const res =
+      const response =
         await adminFetch(
           "/api/establishments"
         );
 
       const json =
-        await res.json();
+        await response.json();
 
       if (
-        !res.ok ||
+        !response.ok ||
         !json.success
       ) {
         setError(
-          json.error ??
-            "No se pudo cargar el establecimiento."
+          currentMessages()
+            .loadError
         );
 
         return;
@@ -79,11 +117,13 @@ export default function EstablishmentsList() {
       error
     ) {
       console.error(
+        "Error loading establishment:",
         error
       );
 
       setError(
-        "No se pudo cargar el establecimiento."
+        currentMessages()
+          .loadError
       );
     } finally {
       setLoading(
@@ -96,10 +136,15 @@ export default function EstablishmentsList() {
     id: number,
     current: boolean
   ) {
-    setError("");
+    setError(
+      ""
+    );
+
+    const activeMessages =
+      currentMessages();
 
     try {
-      const res =
+      const response =
         await adminFetch(
           `/api/establishments/${id}`,
           {
@@ -120,15 +165,14 @@ export default function EstablishmentsList() {
         );
 
       const json =
-        await res.json();
+        await response.json();
 
       if (
-        !res.ok ||
+        !response.ok ||
         !json.success
       ) {
         setError(
-          json.error ??
-            "No se pudo actualizar el establecimiento."
+          activeMessages.updateError
         );
 
         return;
@@ -139,11 +183,12 @@ export default function EstablishmentsList() {
       error
     ) {
       console.error(
+        "Error updating establishment:",
         error
       );
 
       setError(
-        "Error al actualizar el establecimiento."
+        activeMessages.updateError
       );
     }
   }
@@ -153,7 +198,9 @@ export default function EstablishmentsList() {
   ) {
     return (
       <div className="p-8">
-        Cargando establecimiento...
+        {
+          messages.loading
+        }
       </div>
     );
   }
@@ -162,24 +209,32 @@ export default function EstablishmentsList() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold">
-          Establecimiento
+          {
+            messages.title
+          }
         </h2>
 
         <p className="text-gray-500">
-          Gestión del establecimiento actual
+          {
+            messages.subtitle
+          }
         </p>
       </div>
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+          {
+            error
+          }
         </div>
       )}
 
       {establishments.length ===
         0 && (
         <div className="rounded-xl border bg-white p-8 text-center text-gray-500">
-          No hay ningún establecimiento disponible.
+          {
+            messages.empty
+          }
         </div>
       )}
 
@@ -187,102 +242,99 @@ export default function EstablishmentsList() {
         {establishments.map(
           (
             establishment
-          ) => (
-            <div
-              key={
-                establishment.id
-              }
-              className="rounded-xl border bg-white p-6 shadow"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex gap-4">
-                  <Building2
-                    size={
-                      28
-                    }
-                    className="text-indigo-600"
-                  />
+          ) => {
+            const actionLabel =
+              establishment.active
+                ? messages.deactivate
+                : messages.activate;
 
-                  <div>
-                    <h3 className="text-lg font-semibold">
-                      {
-                        establishment.name
-                      }
-                    </h3>
+            return (
+              <div
+                key={
+                  establishment.id
+                }
+                className="rounded-xl border bg-white p-6 shadow"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex gap-4">
+                    <Building2
+                      size={28}
+                      className="text-indigo-600"
+                    />
 
-                    <p className="text-sm text-gray-500">
-                      /
-                      {
-                        establishment.slug
-                      }
-                    </p>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        {
+                          establishment.name
+                        }
+                      </h3>
 
-                    <div className="mt-3 space-y-1 text-sm text-gray-600">
-                      {establishment.address && (
-                        <p>
-                          {
-                            establishment.address
-                          }
-                        </p>
-                      )}
+                      <p className="text-sm text-gray-500">
+                        /
+                        {
+                          establishment.slug
+                        }
+                      </p>
 
-                      {establishment.phone && (
-                        <p>
-                          {
-                            establishment.phone
-                          }
-                        </p>
-                      )}
+                      <div className="mt-3 space-y-1 text-sm text-gray-600">
+                        {establishment.address && (
+                          <p>
+                            {
+                              establishment.address
+                            }
+                          </p>
+                        )}
 
-                      {establishment.email && (
-                        <p>
-                          {
-                            establishment.email
-                          }
-                        </p>
-                      )}
+                        {establishment.phone && (
+                          <p>
+                            {
+                              establishment.phone
+                            }
+                          </p>
+                        )}
+
+                        {establishment.email && (
+                          <p>
+                            {
+                              establishment.email
+                            }
+                          </p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    void toggleActive(
-                      establishment.id,
-                      establishment.active
-                    )
-                  }
-                  title={
-                    establishment.active
-                      ? "Desactivar establecimiento"
-                      : "Activar establecimiento"
-                  }
-                  aria-label={
-                    establishment.active
-                      ? "Desactivar establecimiento"
-                      : "Activar establecimiento"
-                  }
-                >
-                  {establishment.active ? (
-                    <ToggleRight
-                      size={
-                        32
-                      }
-                      className="text-green-600"
-                    />
-                  ) : (
-                    <ToggleLeft
-                      size={
-                        32
-                      }
-                      className="text-gray-400"
-                    />
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void toggleActive(
+                        establishment.id,
+                        establishment.active
+                      )
+                    }
+                    title={
+                      actionLabel
+                    }
+                    aria-label={
+                      actionLabel
+                    }
+                  >
+                    {establishment.active ? (
+                      <ToggleRight
+                        size={32}
+                        className="text-green-600"
+                      />
+                    ) : (
+                      <ToggleLeft
+                        size={32}
+                        className="text-gray-400"
+                      />
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
-          )
+            );
+          }
         )}
       </div>
     </div>

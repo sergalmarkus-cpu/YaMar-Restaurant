@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import {
-  BadgeEuro,
+  Banknote,
   Search,
   Star,
   UserRound,
@@ -16,8 +16,21 @@ import {
 } from "lucide-react";
 
 import {
+  ADMIN_LANGUAGE_LOCALES,
+} from "@/config/admin-languages";
+
+import {
+  ADMIN_CUSTOMERS_MESSAGES,
+  type AdminCustomersLanguage,
+} from "@/config/admin-customers-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Customer {
   key: string;
@@ -71,30 +84,50 @@ interface Customer {
     boolean;
 }
 
-function formatMoney(
-  value: number
-) {
-  return new Intl.NumberFormat(
-    "es-ES",
-    {
-      style:
-        "currency",
+interface EstablishmentRow {
+  id: number;
 
-      currency:
-        "EUR",
-    }
-  ).format(
-    value
-  );
+  currency?:
+    | string
+    | null;
+}
+
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+function formatMoney(
+  value: number,
+  language:
+    AdminCustomersLanguage,
+  currency: string
+) {
+  try {
+    return new Intl.NumberFormat(
+      ADMIN_LANGUAGE_LOCALES[
+        language
+      ],
+      {
+        style:
+          "currency",
+        currency,
+      }
+    ).format(value);
+  } catch {
+    return `${value.toFixed(2)} ${currency}`;
+  }
 }
 
 function formatDate(
-  value: string
+  value: string,
+  language:
+    AdminCustomersLanguage
 ) {
   const date =
-    new Date(
-      value
-    );
+    new Date(value);
 
   if (
     Number.isNaN(
@@ -105,26 +138,44 @@ function formatDate(
   }
 
   return new Intl.DateTimeFormat(
-    "es-ES",
+    ADMIN_LANGUAGE_LOCALES[
+      language
+    ],
     {
       dateStyle:
         "short",
-
       timeStyle:
         "short",
     }
-  ).format(
-    date
-  );
+  ).format(date);
 }
 
 export default function CustomersList() {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    ) as AdminCustomersLanguage;
+
+  const messages =
+    ADMIN_CUSTOMERS_MESSAGES[
+      language
+    ];
+
   const [
     customers,
     setCustomers,
   ] =
     useState<Customer[]>(
       []
+    );
+
+  const [
+    currency,
+    setCurrency,
+  ] =
+    useState(
+      "EUR"
     );
 
   const [
@@ -151,12 +202,70 @@ export default function CustomersList() {
       ""
     );
 
+  function currentMessages() {
+    const currentLanguage =
+      useAdminLanguageStore
+        .getState()
+        .language as
+        AdminCustomersLanguage;
+
+    return ADMIN_CUSTOMERS_MESSAGES[
+      currentLanguage
+    ];
+  }
+
+  const loadCurrency =
+    useCallback(
+      async () => {
+        try {
+          const response =
+            await adminFetch(
+              "/api/establishments"
+            );
+
+          if (!response.ok) {
+            return;
+          }
+
+          const json =
+            (await response.json()) as
+              ApiResponse<
+                EstablishmentRow[]
+              >;
+
+          const establishment =
+            Array.isArray(
+              json.data
+            )
+              ? json.data[0]
+              : undefined;
+
+          const nextCurrency =
+            establishment?.currency
+              ?.trim()
+              .toUpperCase();
+
+          if (nextCurrency) {
+            setCurrency(
+              nextCurrency
+            );
+          }
+        } catch (
+          currencyError
+        ) {
+          console.error(
+            "Error loading establishment currency:",
+            currencyError
+          );
+        }
+      },
+      []
+    );
+
   const loadCustomers =
     useCallback(
       async () => {
-        setError(
-          ""
-        );
+        setError("");
 
         try {
           const response =
@@ -169,16 +278,18 @@ export default function CustomersList() {
             );
 
           const json =
-            await response.json();
+            (await response.json()) as
+              ApiResponse<
+                Customer[]
+              >;
 
           if (
             !response.ok ||
             !json.success
           ) {
             setError(
-              json.error ||
-                json.message ||
-                "No se pudieron cargar los clientes."
+              currentMessages()
+                .loadError
             );
 
             return;
@@ -200,7 +311,8 @@ export default function CustomersList() {
           );
 
           setError(
-            "No se pudieron cargar los clientes."
+            currentMessages()
+              .loadError
           );
         } finally {
           setLoading(
@@ -213,9 +325,13 @@ export default function CustomersList() {
 
   useEffect(
     () => {
-      void loadCustomers();
+      void Promise.all([
+        loadCustomers(),
+        loadCurrency(),
+      ]);
     },
     [
+      loadCurrency,
       loadCustomers,
     ]
   );
@@ -321,7 +437,9 @@ export default function CustomersList() {
   ) {
     return (
       <div className="p-6 text-gray-500">
-        Cargando clientes...
+        {
+          messages.loading
+        }
       </div>
     );
   }
@@ -330,11 +448,15 @@ export default function CustomersList() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          Clientes
+          {
+            messages.title
+          }
         </h1>
 
         <p className="mt-1 text-sm text-gray-500">
-          Historial agregado de clientes y visitantes del establecimiento.
+          {
+            messages.subtitle
+          }
         </p>
       </div>
 
@@ -346,7 +468,10 @@ export default function CustomersList() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
-          title="Clientes identificados"
+          title={
+            messages
+              .identifiedCustomers
+          }
           value={
             String(
               stats.identified
@@ -360,7 +485,10 @@ export default function CustomersList() {
         />
 
         <StatCard
-          title="Ahora en sala"
+          title={
+            messages
+              .currentlyInVenue
+          }
           value={
             String(
               stats.active
@@ -374,21 +502,28 @@ export default function CustomersList() {
         />
 
         <StatCard
-          title="Cobrado"
+          title={
+            messages.collected
+          }
           value={
             formatMoney(
-              stats.paid
+              stats.paid,
+              language,
+              currency
             )
           }
           icon={
-            <BadgeEuro
+            <Banknote
               size={21}
             />
           }
         />
 
         <StatCard
-          title="Puntos acumulados"
+          title={
+            messages
+              .accumulatedPoints
+          }
           value={
             String(
               stats.points
@@ -421,7 +556,10 @@ export default function CustomersList() {
                 event.target.value
               )
             }
-            placeholder="Buscar por nombre, email, teléfono o habitación..."
+            placeholder={
+              messages
+                .searchPlaceholder
+            }
             className="w-full rounded-lg border py-2 pl-10 pr-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
           />
         </div>
@@ -431,7 +569,9 @@ export default function CustomersList() {
         {filteredCustomers.length ===
         0 ? (
           <div className="p-10 text-center text-gray-500">
-            No hay clientes que mostrar.
+            {
+              messages.noCustomers
+            }
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -439,27 +579,39 @@ export default function CustomersList() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                    Cliente
+                    {
+                      messages.customer
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                    Visitas
+                    {
+                      messages.visits
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                    Pedidos
+                    {
+                      messages.orders
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                    Cobrado
+                    {
+                      messages.collected
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                    Puntos
+                    {
+                      messages.points
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase text-gray-500">
-                    Última visita
+                    {
+                      messages.lastVisit
+                    }
                   </th>
                 </tr>
               </thead>
@@ -486,12 +638,12 @@ export default function CustomersList() {
                           <div>
                             <p className="font-medium text-gray-900">
                               {customer.customerName ||
-                                "Visitante"}
+                                messages.visitor}
                             </p>
 
                             <p className="text-sm text-gray-500">
                               {customer.customerEmail ||
-                                "Sin email"}
+                                messages.noEmail}
                             </p>
 
                             {customer.customerPhone && (
@@ -504,7 +656,10 @@ export default function CustomersList() {
 
                             {customer.roomNumber && (
                               <p className="text-xs text-gray-400">
-                                Habitación:{" "}
+                                {
+                                  messages.room
+                                }
+                                :{" "}
                                 {
                                   customer.roomNumber
                                 }
@@ -514,7 +669,9 @@ export default function CustomersList() {
                             {customer.activeSessions >
                               0 && (
                               <span className="mt-1 inline-flex rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
-                                En sala
+                                {
+                                  messages.inVenue
+                                }
                               </span>
                             )}
                           </div>
@@ -538,26 +695,42 @@ export default function CustomersList() {
                           {
                             customer.successfulOrders
                           }{" "}
-                          completados ·{" "}
+                          {
+                            messages.completed
+                          }
+                          {" · "}
                           {
                             customer.cancelledOrders
                           }{" "}
-                          cancelados
+                          {
+                            messages.cancelled
+                          }
                         </p>
                       </td>
 
                       <td className="px-5 py-4">
                         <p className="text-sm font-semibold text-gray-900">
-                          {formatMoney(
-                            customer.totalPaid
-                          )}
+                          {
+                            formatMoney(
+                              customer.totalPaid,
+                              language,
+                              currency
+                            )
+                          }
                         </p>
 
                         <p className="text-xs text-gray-400">
-                          Pedidos:{" "}
-                          {formatMoney(
-                            customer.totalOrdered
-                          )}
+                          {
+                            messages.ordersPrefix
+                          }
+                          :{" "}
+                          {
+                            formatMoney(
+                              customer.totalOrdered,
+                              language,
+                              currency
+                            )
+                          }
                         </p>
                       </td>
 
@@ -568,9 +741,12 @@ export default function CustomersList() {
                       </td>
 
                       <td className="whitespace-nowrap px-5 py-4 text-sm text-gray-500">
-                        {formatDate(
-                          customer.lastVisit
-                        )}
+                        {
+                          formatDate(
+                            customer.lastVisit,
+                            language
+                          )
+                        }
                       </td>
                     </tr>
                   )

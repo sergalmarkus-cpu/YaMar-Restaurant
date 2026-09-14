@@ -1,123 +1,56 @@
 "use client";
 
 import {
-  useEffect,
-  useState,
-} from "react";
+  ADMIN_KITCHEN_MESSAGES,
+  type KitchenOrderStatus,
+} from "@/config/admin-kitchen-i18n";
 
 import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
 
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
+import type {
+  KitchenOrder,
+} from "../page";
+
 import OrderCard from "./OrderCard";
 
-interface Order {
-  id: number;
-  orderNumber: string;
-  tableId: number;
-  tableName: string | null;
-  status: string;
-  total: number;
-  createdAt: string;
+interface Props {
+  orders: KitchenOrder[];
+  currency: string;
+  loading: boolean;
+  onRefresh: () => Promise<void>;
 }
 
-const columns = [
-  {
-    id: "pending",
-    title: "Pendientes",
-  },
-  {
-    id: "accepted",
-    title: "Aceptados",
-  },
-  {
-    id: "preparing",
-    title: "Preparando",
-  },
-  {
-    id: "ready",
-    title: "Listos",
-  },
-  {
-    id: "delivered",
-    title: "Entregados",
-  },
-];
+const columns:
+  KitchenOrderStatus[] = [
+    "pending",
+    "accepted",
+    "preparing",
+    "ready",
+    "delivered",
+  ];
 
-export default function KitchenBoard() {
-  const [
-    orders,
-    setOrders,
-  ] =
-    useState<Order[]>([]);
+export default function KitchenBoard({
+  orders,
+  currency,
+  loading,
+  onRefresh,
+}: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
 
-  const [
-    loading,
-    setLoading,
-  ] =
-    useState(true);
-
-  async function fetchOrders() {
-    try {
-      const res =
-        await adminFetch(
-          "/api/kitchen",
-          {
-            cache:
-              "no-store",
-          }
-        );
-
-      const json =
-        await res.json();
-
-      if (
-        !res.ok ||
-        !json.success
-      ) {
-        console.error(
-          "Error loading kitchen orders:",
-          json.error ??
-            json.message
-        );
-
-        return;
-      }
-
-      setOrders(
-        json.data
-      );
-    } catch (
-      error
-    ) {
-      console.error(
-        "Error loading kitchen orders:",
-        error
-      );
-    } finally {
-      setLoading(
-        false
-      );
-    }
-  }
-
-  useEffect(() => {
-    void fetchOrders();
-
-    const interval =
-      window.setInterval(
-        () => {
-          void fetchOrders();
-        },
-        5000
-      );
-
-    return () => {
-      window.clearInterval(
-        interval
-      );
-    };
-  }, []);
+  const messages =
+    ADMIN_KITCHEN_MESSAGES[
+      language
+    ];
 
   async function updateStatus(
     id: number,
@@ -151,7 +84,8 @@ export default function KitchenBoard() {
         !json.success
       ) {
         console.error(
-          "Error updating order status:",
+          messages.board
+            .updateError,
           json.error ??
             json.message
         );
@@ -159,20 +93,19 @@ export default function KitchenBoard() {
         return;
       }
 
-      await fetchOrders();
+      await onRefresh();
     } catch (
       error
     ) {
       console.error(
-        "Error updating order status:",
+        messages.board
+          .updateError,
         error
       );
     }
   }
 
-  if (
-    loading
-  ) {
+  if (loading) {
     return (
       <div className="flex justify-center py-20">
         <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-orange-600" />
@@ -183,45 +116,40 @@ export default function KitchenBoard() {
   return (
     <div className="grid gap-6 lg:grid-cols-5">
       {columns.map(
-        (
-          column
-        ) => (
-          <div
-            key={
-              column.id
-            }
-            className="rounded-xl bg-gray-100 p-4"
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="font-bold">
-                {
-                  column.title
-                }
-              </h2>
+        (column) => {
+          const columnOrders =
+            orders.filter(
+              (order) =>
+                order.status ===
+                column
+            );
 
-              <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold">
-                {
-                  orders.filter(
-                    (
-                      order
-                    ) =>
-                      order.status ===
-                      column.id
-                  ).length
-                }
-              </span>
-            </div>
+          return (
+            <div
+              key={
+                column
+              }
+              className="rounded-xl bg-gray-100 p-4"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="font-bold">
+                  {
+                    messages
+                      .status[
+                      column
+                    ]
+                  }
+                </h2>
 
-            <div className="space-y-3">
-              {orders
-                .filter(
-                  (
-                    order
-                  ) =>
-                    order.status ===
-                    column.id
-                )
-                .map(
+                <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold">
+                  {
+                    columnOrders.length
+                  }
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {columnOrders.map(
                   (
                     order
                   ) => (
@@ -232,15 +160,19 @@ export default function KitchenBoard() {
                       order={
                         order
                       }
+                      currency={
+                        currency
+                      }
                       onStatusChange={
                         updateStatus
                       }
                     />
                   )
                 )}
+              </div>
             </div>
-          </div>
-        )
+          );
+        }
       )}
     </div>
   );

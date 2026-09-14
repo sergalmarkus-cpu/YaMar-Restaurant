@@ -10,12 +10,20 @@ import {
 } from "sonner";
 
 import {
+  ADMIN_CATEGORIES_MESSAGES,
+  getAdminMenuText,
+} from "@/config/admin-categories-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
 
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
 interface Menu {
   id: number;
-
   name:
     | Record<
         string,
@@ -35,6 +43,17 @@ export default function NewCategoryModal({
   onClose,
   onCreated,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_CATEGORIES_MESSAGES[
+      language
+    ];
+
   const [
     menus,
     setMenus,
@@ -71,6 +90,14 @@ export default function NewCategoryModal({
   ] =
     useState(false);
 
+  function currentMessages() {
+    return ADMIN_CATEGORIES_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
+
   useEffect(() => {
     if (!open) {
       return;
@@ -96,8 +123,8 @@ export default function NewCategoryModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            "No se pudieron cargar los menús."
+          currentMessages()
+            .menusLoadError
         );
 
         return;
@@ -106,25 +133,39 @@ export default function NewCategoryModal({
       setMenus(
         json.data
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error loading menus:",
         error
       );
 
       toast.error(
-        "No se pudieron cargar los menús."
+        currentMessages()
+          .menusLoadError
       );
     }
   }
 
   async function saveCategory() {
+    const currentLanguage =
+      useAdminLanguageStore
+        .getState()
+        .language;
+
+    const activeMessages =
+      ADMIN_CATEGORIES_MESSAGES[
+        currentLanguage
+      ];
+
     if (
       !menuId ||
       !name.trim()
     ) {
       toast.error(
-        "Completa todos los campos obligatorios."
+        activeMessages
+          .requiredFields
       );
 
       return;
@@ -133,6 +174,9 @@ export default function NewCategoryModal({
     setSaving(true);
 
     try {
+      const trimmedDescription =
+        description.trim();
+
       const res =
         await adminFetch(
           "/api/categories",
@@ -153,15 +197,15 @@ export default function NewCategoryModal({
                   ),
 
                 name: {
-                  es:
+                  [currentLanguage]:
                     name.trim(),
                 },
 
                 description:
-                  description.trim()
+                  trimmedDescription
                     ? {
-                        es:
-                          description.trim(),
+                        [currentLanguage]:
+                          trimmedDescription,
                       }
                     : {},
 
@@ -182,48 +226,40 @@ export default function NewCategoryModal({
       ) {
         toast.error(
           json.error ||
-            "No se pudo crear la categoría."
+            activeMessages
+              .createError
         );
 
         return;
       }
 
-      setMenuId(
-        ""
-      );
-
-      setName(
-        ""
-      );
-
-      setDescription(
-        ""
-      );
-
-      setDisplayOrder(
-        0
-      );
+      setMenuId("");
+      setName("");
+      setDescription("");
+      setDisplayOrder(0);
 
       toast.success(
-        "Categoría creada."
+        activeMessages
+          .createSuccess
       );
 
       await onCreated();
 
       onClose();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error creating category:",
         error
       );
 
       toast.error(
-        "No se pudo crear la categoría."
+        activeMessages
+          .createError
       );
     } finally {
-      setSaving(
-        false
-      );
+      setSaving(false);
     }
   }
 
@@ -232,18 +268,22 @@ export default function NewCategoryModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-5">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5">
+      <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
         <div className="border-b p-6">
           <h2 className="text-xl font-bold">
-            Nueva Categoría
+            {
+              messages.createTitle
+            }
           </h2>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="space-y-5 p-6">
           <div>
-            <label className="block text-sm mb-2">
-              Menú
+            <label className="mb-2 block text-sm">
+              {
+                messages.menu
+              }
             </label>
 
             <select
@@ -254,14 +294,15 @@ export default function NewCategoryModal({
                 event
               ) =>
                 setMenuId(
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             >
               <option value="">
-                Selecciona un menú
+                {
+                  messages.selectMenu
+                }
               </option>
 
               {menus.map(
@@ -276,14 +317,12 @@ export default function NewCategoryModal({
                       menu.id
                     }
                   >
-                    {typeof menu.name ===
-                    "string"
-                      ? menu.name
-                      : menu.name
-                          .es ||
-                        Object.values(
-                          menu.name
-                        )[0]}
+                    {getAdminMenuText(
+                      menu.name,
+                      language,
+                      messages
+                        .unnamedMenu
+                    )}
                   </option>
                 )
               )}
@@ -291,8 +330,10 @@ export default function NewCategoryModal({
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Nombre
+            <label className="mb-2 block text-sm">
+              {
+                messages.name
+              }
             </label>
 
             <input
@@ -303,18 +344,21 @@ export default function NewCategoryModal({
                 event
               ) =>
                 setName(
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
-              placeholder="Ej: Entrantes"
+              className="w-full rounded-xl border p-3"
+              placeholder={
+                messages.namePlaceholder
+              }
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Descripción
+            <label className="mb-2 block text-sm">
+              {
+                messages.description
+              }
             </label>
 
             <textarea
@@ -325,20 +369,24 @@ export default function NewCategoryModal({
                 event
               ) =>
                 setDescription(
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
               rows={
                 3
+              }
+              placeholder={
+                messages.descriptionPlaceholder
               }
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Orden
+            <label className="mb-2 block text-sm">
+              {
+                messages.displayOrder
+              }
             </label>
 
             <input
@@ -354,17 +402,16 @@ export default function NewCategoryModal({
               ) =>
                 setDisplayOrder(
                   Number(
-                    event.target
-                      .value
+                    event.target.value
                   )
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             />
           </div>
         </div>
 
-        <div className="border-t p-6 flex justify-end gap-3">
+        <div className="flex justify-end gap-3 border-t p-6">
           <button
             type="button"
             onClick={
@@ -373,9 +420,11 @@ export default function NewCategoryModal({
             disabled={
               saving
             }
-            className="px-5 py-3 border rounded-xl"
+            className="rounded-xl border px-5 py-3"
           >
-            Cancelar
+            {
+              messages.cancel
+            }
           </button>
 
           <button
@@ -386,11 +435,11 @@ export default function NewCategoryModal({
             disabled={
               saving
             }
-            className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-xl bg-indigo-600 px-5 py-3 text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             {saving
-              ? "Guardando..."
-              : "Guardar"}
+              ? messages.saving
+              : messages.save}
           </button>
         </div>
       </div>

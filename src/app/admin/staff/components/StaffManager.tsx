@@ -24,16 +24,24 @@ import {
 } from "lucide-react";
 
 import {
+  ADMIN_LANGUAGE_LOCALES,
+} from "@/config/admin-languages";
+
+import {
+  ADMIN_STAFF_MESSAGES,
+  type AdminStaffRole,
+} from "@/config/admin-staff-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
 
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
 type UserRole =
-  | "admin"
-  | "manager"
-  | "waiter"
-  | "kitchen"
-  | "bar"
-  | "cashier";
+  AdminStaffRole;
 
 interface StaffUser {
   id: number;
@@ -69,52 +77,23 @@ const EMPTY_FORM: StaffFormState = {
   active: true,
 };
 
-const ROLE_OPTIONS: {
-  value: UserRole;
-  label: string;
-}[] = [
-  {
-    value: "admin",
-    label: "Administrador",
-  },
-  {
-    value: "manager",
-    label: "Manager",
-  },
-  {
-    value: "waiter",
-    label: "Camarero",
-  },
-  {
-    value: "kitchen",
-    label: "Cocina",
-  },
-  {
-    value: "bar",
-    label: "Bar",
-  },
-  {
-    value: "cashier",
-    label: "Caja",
-  },
+const ROLE_VALUES: UserRole[] = [
+  "admin",
+  "manager",
+  "waiter",
+  "kitchen",
+  "bar",
+  "cashier",
 ];
 
-function roleLabel(
-  role: UserRole
-) {
-  return (
-    ROLE_OPTIONS.find(
-      (option) =>
-        option.value === role
-    )?.label ?? role
-  );
-}
-
 function formatDate(
-  value: string | null
+  value: string | null,
+  locale: string,
+  neverLabel: string,
+  invalidLabel: string
 ) {
   if (!value) {
-    return "Nunca";
+    return neverLabel;
   }
 
   const date =
@@ -125,11 +104,11 @@ function formatDate(
       date.getTime()
     )
   ) {
-    return "—";
+    return invalidLabel;
   }
 
   return new Intl.DateTimeFormat(
-    "es-ES",
+    locale,
     {
       dateStyle: "short",
       timeStyle: "short",
@@ -161,6 +140,22 @@ function getApiError(
 }
 
 export default function StaffManager() {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_STAFF_MESSAGES[
+      language
+    ];
+
+  const locale =
+    ADMIN_LANGUAGE_LOCALES[
+      language
+    ];
+
   const [
     users,
     setUsers,
@@ -274,7 +269,8 @@ export default function StaffManager() {
             setError(
               getApiError(
                 json,
-                "No se pudo cargar el personal."
+                messages.errors
+                  .load
               )
             );
 
@@ -297,7 +293,8 @@ export default function StaffManager() {
           );
 
           setError(
-            "No se pudo cargar el personal."
+            messages.errors
+              .load
           );
         } finally {
           setLoading(
@@ -309,7 +306,10 @@ export default function StaffManager() {
           );
         }
       },
-      []
+      [
+        messages.errors
+          .load,
+      ]
     );
 
   useEffect(() => {
@@ -453,7 +453,8 @@ export default function StaffManager() {
 
     if (!name) {
       setError(
-        "El nombre es obligatorio."
+        messages.validation
+          .nameRequired
       );
 
       return;
@@ -461,7 +462,8 @@ export default function StaffManager() {
 
     if (!email) {
       setError(
-        "El email es obligatorio."
+        messages.validation
+          .emailRequired
       );
 
       return;
@@ -472,7 +474,8 @@ export default function StaffManager() {
       password.length < 8
     ) {
       setError(
-        "La contraseña debe tener al menos 8 caracteres."
+        messages.validation
+          .passwordMin
       );
 
       return;
@@ -484,7 +487,8 @@ export default function StaffManager() {
       password.length < 8
     ) {
       setError(
-        "La nueva contraseña debe tener al menos 8 caracteres."
+        messages.validation
+          .newPasswordMin
       );
 
       return;
@@ -557,8 +561,10 @@ export default function StaffManager() {
           getApiError(
             json,
             editingUser
-              ? "No se pudo actualizar el empleado."
-              : "No se pudo crear el empleado."
+              ? messages.errors
+                  .update
+              : messages.errors
+                  .create
           )
         );
 
@@ -579,8 +585,10 @@ export default function StaffManager() {
 
       setSuccessMessage(
         editingUser
-          ? "Empleado actualizado correctamente."
-          : "Empleado creado correctamente."
+          ? messages.success
+              .updated
+          : messages.success
+              .created
       );
 
       await loadUsers({
@@ -596,8 +604,10 @@ export default function StaffManager() {
 
       setError(
         editingUser
-          ? "No se pudo actualizar el empleado."
-          : "No se pudo crear el empleado."
+          ? messages.errors
+              .update
+          : messages.errors
+              .create
       );
     } finally {
       setSaving(
@@ -646,7 +656,8 @@ export default function StaffManager() {
         setError(
           getApiError(
             json,
-            "No se pudo cambiar el estado del empleado."
+            messages.errors
+              .toggle
           )
         );
 
@@ -655,8 +666,10 @@ export default function StaffManager() {
 
       setSuccessMessage(
         !user.active
-          ? "Empleado activado correctamente."
-          : "Empleado desactivado correctamente."
+          ? messages.success
+              .activated
+          : messages.success
+              .deactivated
       );
 
       await loadUsers({
@@ -671,7 +684,8 @@ export default function StaffManager() {
       );
 
       setError(
-        "No se pudo cambiar el estado del empleado."
+        messages.errors
+          .toggle
       );
     } finally {
       setTogglingId(
@@ -685,7 +699,10 @@ export default function StaffManager() {
   ) {
     if (
       !window.confirm(
-        `¿Eliminar definitivamente a "${user.name}"?`
+        messages.confirmations
+          .deleteUser(
+            user.name
+          )
       )
     ) {
       return;
@@ -717,7 +734,8 @@ export default function StaffManager() {
         setError(
           getApiError(
             json,
-            "No se pudo eliminar el empleado."
+            messages.errors
+              .delete
           )
         );
 
@@ -725,7 +743,8 @@ export default function StaffManager() {
       }
 
       setSuccessMessage(
-        "Empleado eliminado correctamente."
+        messages.success
+          .deleted
       );
 
       await loadUsers({
@@ -740,7 +759,8 @@ export default function StaffManager() {
       );
 
       setError(
-        "No se pudo eliminar el empleado."
+        messages.errors
+          .delete
       );
     } finally {
       setDeletingId(
@@ -756,7 +776,9 @@ export default function StaffManager() {
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-gray-200 border-t-indigo-600" />
 
           <p className="mt-4 text-sm text-gray-500">
-            Cargando personal...
+            {
+              messages.loading
+            }
           </p>
         </div>
       </div>
@@ -769,11 +791,17 @@ export default function StaffManager() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Personal
+              {
+                messages.page
+                  .title
+              }
             </h1>
 
             <p className="mt-1 text-sm text-gray-500">
-              Gestiona los usuarios y roles del establecimiento.
+              {
+                messages.page
+                  .subtitle
+              }
             </p>
           </div>
 
@@ -797,7 +825,10 @@ export default function StaffManager() {
                 }
               />
 
-              Actualizar
+              {
+                messages.page
+                  .refresh
+              }
             </button>
 
             <button
@@ -811,7 +842,10 @@ export default function StaffManager() {
                 size={18}
               />
 
-              Nuevo empleado
+              {
+                messages.page
+                  .create
+              }
             </button>
           </div>
         </div>
@@ -830,7 +864,10 @@ export default function StaffManager() {
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
-            title="Total"
+            title={
+              messages.stats
+                .total
+            }
             value={
               stats.total
             }
@@ -842,7 +879,10 @@ export default function StaffManager() {
           />
 
           <StatCard
-            title="Activos"
+            title={
+              messages.stats
+                .active
+            }
             value={
               stats.active
             }
@@ -854,7 +894,10 @@ export default function StaffManager() {
           />
 
           <StatCard
-            title="Gestión"
+            title={
+              messages.stats
+                .management
+            }
             value={
               stats.managers
             }
@@ -866,7 +909,10 @@ export default function StaffManager() {
           />
 
           <StatCard
-            title="Operativos"
+            title={
+              messages.stats
+                .operational
+            }
             value={
               stats.operational
             }
@@ -888,11 +934,17 @@ export default function StaffManager() {
               />
 
               <h2 className="mt-4 font-semibold text-gray-900">
-                No hay empleados
+                {
+                  messages.empty
+                    .title
+                }
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
-                Crea el primer usuario de personal del establecimiento.
+                {
+                  messages.empty
+                    .description
+                }
               </p>
             </div>
           ) : (
@@ -901,23 +953,38 @@ export default function StaffManager() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Empleado
+                      {
+                        messages.table
+                          .employee
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Rol
+                      {
+                        messages.table
+                          .role
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Estado
+                      {
+                        messages.table
+                          .status
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Último acceso
+                      {
+                        messages.table
+                          .lastLogin
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Acciones
+                      {
+                        messages.table
+                          .actions
+                      }
                     </th>
                   </tr>
                 </thead>
@@ -971,9 +1038,11 @@ export default function StaffManager() {
 
                         <td className="whitespace-nowrap px-6 py-4">
                           <span className="inline-flex rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-                            {roleLabel(
-                              user.role
-                            )}
+                            {
+                              messages.roles[
+                                user.role
+                              ]
+                            }
                           </span>
                         </td>
 
@@ -986,14 +1055,23 @@ export default function StaffManager() {
                             }
                           >
                             {user.active
-                              ? "Activo"
-                              : "Inactivo"}
+                              ? messages
+                                  .status
+                                  .active
+                              : messages
+                                  .status
+                                  .inactive}
                           </span>
                         </td>
 
                         <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
                           {formatDate(
-                            user.lastLogin
+                            user.lastLogin,
+                            locale,
+                            messages.dates
+                              .never,
+                            messages.dates
+                              .invalid
                           )}
                         </td>
 
@@ -1007,8 +1085,11 @@ export default function StaffManager() {
                                 )
                               }
                               className="rounded-lg border p-2 text-gray-600 hover:bg-gray-50"
-                              title="Editar"
-                              aria-label={`Editar ${user.name}`}
+                              title={
+                                messages.actions
+                                  .edit
+                              }
+                              aria-label={`${messages.actions.edit} ${user.name}`}
                             >
                               <Pencil
                                 size={
@@ -1031,13 +1112,17 @@ export default function StaffManager() {
                               className="rounded-lg border p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                               title={
                                 user.active
-                                  ? "Desactivar"
-                                  : "Activar"
+                                  ? messages
+                                      .actions
+                                      .deactivate
+                                  : messages
+                                      .actions
+                                      .activate
                               }
                               aria-label={
                                 user.active
-                                  ? `Desactivar ${user.name}`
-                                  : `Activar ${user.name}`
+                                  ? `${messages.actions.deactivate} ${user.name}`
+                                  : `${messages.actions.activate} ${user.name}`
                               }
                             >
                               {user.active ? (
@@ -1069,8 +1154,11 @@ export default function StaffManager() {
                                 user.id
                               }
                               className="rounded-lg border border-red-100 p-2 text-red-600 hover:bg-red-50 disabled:opacity-50"
-                              title="Eliminar"
-                              aria-label={`Eliminar ${user.name}`}
+                              title={
+                                messages.actions
+                                  .delete
+                              }
+                              aria-label={`${messages.actions.delete} ${user.name}`}
                             >
                               <Trash2
                                 size={
@@ -1103,6 +1191,9 @@ export default function StaffManager() {
           }
           saving={
             saving
+          }
+          messages={
+            messages
           }
           onClose={
             closeModal
@@ -1152,6 +1243,7 @@ function StaffModal({
   form,
   setForm,
   saving,
+  messages,
   onClose,
   onSubmit,
 }: {
@@ -1169,6 +1261,9 @@ function StaffModal({
   saving:
     boolean;
 
+  messages:
+    typeof ADMIN_STAFF_MESSAGES.es;
+
   onClose:
     () => void;
 
@@ -1184,14 +1279,18 @@ function StaffModal({
           <div>
             <h2 className="text-lg font-bold text-gray-900">
               {editingUser
-                ? "Editar empleado"
-                : "Nuevo empleado"}
+                ? messages.modal
+                    .editTitle
+                : messages.modal
+                    .createTitle}
             </h2>
 
             <p className="text-sm text-gray-500">
               {editingUser
-                ? "Actualiza los datos y permisos del usuario."
-                : "Crea un nuevo usuario para este establecimiento."}
+                ? messages.modal
+                    .editDescription
+                : messages.modal
+                    .createDescription}
             </p>
           </div>
 
@@ -1204,7 +1303,10 @@ function StaffModal({
               saving
             }
             className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
-            aria-label="Cerrar"
+            aria-label={
+              messages.modal
+                .close
+            }
           >
             <X
               size={20}
@@ -1220,7 +1322,10 @@ function StaffModal({
         >
           <div className="grid gap-5 md:grid-cols-2">
             <Field
-              label="Nombre"
+              label={
+                messages.modal
+                  .fields.name
+              }
               required
             >
               <input
@@ -1245,12 +1350,19 @@ function StaffModal({
                   )
                 }
                 className="w-full rounded-lg border px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                placeholder="Nombre del empleado"
+                placeholder={
+                  messages.modal
+                    .placeholders
+                    .name
+                }
               />
             </Field>
 
             <Field
-              label="Email"
+              label={
+                messages.modal
+                  .fields.email
+              }
               required
             >
               <input
@@ -1275,20 +1387,32 @@ function StaffModal({
                   )
                 }
                 className="w-full rounded-lg border px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                placeholder="empleado@ejemplo.com"
+                placeholder={
+                  messages.modal
+                    .placeholders
+                    .email
+                }
               />
             </Field>
 
             <Field
               label={
                 editingUser
-                  ? "Nueva contraseña"
-                  : "Contraseña"
+                  ? messages.modal
+                      .fields
+                      .newPassword
+                  : messages.modal
+                      .fields
+                      .password
               }
               hint={
                 editingUser
-                  ? "Déjala vacía para conservar la actual."
-                  : "Mínimo 8 caracteres."
+                  ? messages.modal
+                      .hints
+                      .passwordEdit
+                  : messages.modal
+                      .hints
+                      .passwordCreate
               }
               required={
                 !editingUser
@@ -1320,14 +1444,21 @@ function StaffModal({
                 className="w-full rounded-lg border px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 placeholder={
                   editingUser
-                    ? "Sin cambios"
-                    : "Contraseña"
+                    ? messages.modal
+                        .placeholders
+                        .passwordUnchanged
+                    : messages.modal
+                        .placeholders
+                        .password
                 }
               />
             </Field>
 
             <Field
-              label="Rol"
+              label={
+                messages.modal
+                  .fields.role
+              }
               required
             >
               <select
@@ -1351,20 +1482,22 @@ function StaffModal({
                 }
                 className="w-full rounded-lg border bg-white px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
               >
-                {ROLE_OPTIONS.map(
+                {ROLE_VALUES.map(
                   (
                     role
                   ) => (
                     <option
                       key={
-                        role.value
+                        role
                       }
                       value={
-                        role.value
+                        role
                       }
                     >
                       {
-                        role.label
+                        messages.roles[
+                          role
+                        ]
                       }
                     </option>
                   )
@@ -1373,7 +1506,10 @@ function StaffModal({
             </Field>
 
             <Field
-              label="Teléfono"
+              label={
+                messages.modal
+                  .fields.phone
+              }
             >
               <input
                 type="text"
@@ -1396,13 +1532,23 @@ function StaffModal({
                   )
                 }
                 className="w-full rounded-lg border px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                placeholder="+34 600 000 000"
+                placeholder={
+                  messages.modal
+                    .placeholders
+                    .phone
+                }
               />
             </Field>
 
             <Field
-              label="Avatar"
-              hint="URL opcional."
+              label={
+                messages.modal
+                  .fields.avatar
+              }
+              hint={
+                messages.modal
+                  .hints.avatar
+              }
             >
               <input
                 type="text"
@@ -1425,7 +1571,11 @@ function StaffModal({
                   )
                 }
                 className="w-full rounded-lg border px-3 py-2 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                placeholder="https://..."
+                placeholder={
+                  messages.modal
+                    .placeholders
+                    .avatar
+                }
               />
             </Field>
           </div>
@@ -1433,11 +1583,17 @@ function StaffModal({
           <label className="flex cursor-pointer items-center justify-between rounded-xl border p-4">
             <div>
               <p className="font-medium text-gray-900">
-                Usuario activo
+                {
+                  messages.modal
+                    .activeTitle
+                }
               </p>
 
               <p className="text-sm text-gray-500">
-                Los usuarios inactivos no pueden iniciar sesión.
+                {
+                  messages.modal
+                    .activeDescription
+                }
               </p>
             </div>
 
@@ -1476,7 +1632,10 @@ function StaffModal({
               }
               className="rounded-lg border px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
-              Cancelar
+              {
+                messages.modal
+                  .cancel
+              }
             </button>
 
             <button
@@ -1487,10 +1646,13 @@ function StaffModal({
               className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving
-                ? "Guardando..."
+                ? messages.modal
+                    .saving
                 : editingUser
-                  ? "Guardar cambios"
-                  : "Crear empleado"}
+                  ? messages.modal
+                      .saveChanges
+                  : messages.modal
+                      .createEmployee}
             </button>
           </div>
         </form>

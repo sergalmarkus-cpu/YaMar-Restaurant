@@ -10,8 +10,18 @@ import {
 } from "sonner";
 
 import {
+  ADMIN_CATEGORIES_MESSAGES,
+  getAdminCategoryText,
+  getAdminMenuText,
+} from "@/config/admin-categories-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Menu {
   id: number;
@@ -26,25 +36,30 @@ interface Menu {
 interface Category {
   id: number;
   menuId: number;
+
   name:
     Record<
       string,
       string
     >;
+
   description:
     | Record<
         string,
         string
       >
     | null;
+
   displayOrder: number;
   active: boolean;
 }
 
 interface Props {
   open: boolean;
+
   category:
     Category | null;
+
   onClose: () => void;
   onUpdated: () => void;
 }
@@ -55,6 +70,17 @@ export default function EditCategoryModal({
   onClose,
   onUpdated,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_CATEGORIES_MESSAGES[
+      language
+    ];
+
   const [
     menus,
     setMenus,
@@ -97,6 +123,14 @@ export default function EditCategoryModal({
   ] =
     useState(false);
 
+  function currentMessages() {
+    return ADMIN_CATEGORIES_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
+
   useEffect(() => {
     if (
       !open ||
@@ -114,13 +148,19 @@ export default function EditCategoryModal({
     );
 
     setName(
-      category.name?.es ??
+      getAdminCategoryText(
+        category.name,
+        language,
         ""
+      )
     );
 
     setDescription(
-      category.description
-        ?.es ?? ""
+      getAdminCategoryText(
+        category.description,
+        language,
+        ""
+      )
     );
 
     setDisplayOrder(
@@ -133,6 +173,7 @@ export default function EditCategoryModal({
   }, [
     open,
     category,
+    language,
   ]);
 
   async function loadMenus() {
@@ -150,8 +191,8 @@ export default function EditCategoryModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            "No se pudieron cargar los menús."
+          currentMessages()
+            .menusLoadError
         );
 
         return;
@@ -160,32 +201,83 @@ export default function EditCategoryModal({
       setMenus(
         json.data
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error loading menus:",
         error
       );
 
       toast.error(
-        "No se pudieron cargar los menús."
+        currentMessages()
+          .menusLoadError
       );
     }
   }
 
   async function updateCategory() {
-    if (!category) {
+    const currentCategory =
+      category;
+
+    if (!currentCategory) {
       return;
     }
+
+    const currentLanguage =
+      useAdminLanguageStore
+        .getState()
+        .language;
+
+    const activeMessages =
+      ADMIN_CATEGORIES_MESSAGES[
+        currentLanguage
+      ];
 
     if (
       !menuId ||
       !name.trim()
     ) {
       toast.error(
-        "Completa los campos obligatorios."
+        activeMessages
+          .requiredFields
       );
 
       return;
+    }
+
+    const nextName = {
+      ...currentCategory.name,
+
+      [currentLanguage]:
+        name.trim(),
+    };
+
+    const nextDescription = {
+      ...(
+        currentCategory.description ??
+        {}
+      ),
+    };
+
+    const trimmedDescription =
+      description.trim();
+
+    if (
+      trimmedDescription
+    ) {
+      nextDescription[
+        currentLanguage
+      ] =
+        trimmedDescription;
+    }
+
+    if (
+      !trimmedDescription
+    ) {
+      delete nextDescription[
+        currentLanguage
+      ];
     }
 
     setSaving(true);
@@ -193,7 +285,7 @@ export default function EditCategoryModal({
     try {
       const res =
         await adminFetch(
-          `/api/categories/${category.id}`,
+          `/api/categories/${currentCategory.id}`,
           {
             method:
               "PUT",
@@ -210,18 +302,11 @@ export default function EditCategoryModal({
                     menuId
                   ),
 
-                name: {
-                  es:
-                    name.trim(),
-                },
+                name:
+                  nextName,
 
                 description:
-                  description.trim()
-                    ? {
-                        es:
-                          description.trim(),
-                      }
-                    : {},
+                  nextDescription,
 
                 displayOrder,
 
@@ -239,32 +324,35 @@ export default function EditCategoryModal({
       ) {
         toast.error(
           json.error ||
-            "No se pudo actualizar la categoría."
+            activeMessages
+              .editError
         );
 
         return;
       }
 
       toast.success(
-        "Categoría actualizada."
+        activeMessages
+          .editSuccess
       );
 
       await onUpdated();
 
       onClose();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error updating category:",
         error
       );
 
       toast.error(
-        "No se pudo actualizar la categoría."
+        activeMessages
+          .editError
       );
     } finally {
-      setSaving(
-        false
-      );
+      setSaving(false);
     }
   }
 
@@ -276,18 +364,22 @@ export default function EditCategoryModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-5">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5">
+      <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
         <div className="border-b p-6">
           <h2 className="text-xl font-bold">
-            Editar Categoría
+            {
+              messages.editTitle
+            }
           </h2>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="space-y-5 p-6">
           <div>
-            <label className="block text-sm mb-2">
-              Menú
+            <label className="mb-2 block text-sm">
+              {
+                messages.menu
+              }
             </label>
 
             <select
@@ -298,11 +390,10 @@ export default function EditCategoryModal({
                 event
               ) =>
                 setMenuId(
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             >
               {menus.map(
                 (
@@ -316,14 +407,12 @@ export default function EditCategoryModal({
                       menu.id
                     }
                   >
-                    {typeof menu.name ===
-                    "string"
-                      ? menu.name
-                      : menu.name
-                          .es ||
-                        Object.values(
-                          menu.name
-                        )[0]}
+                    {getAdminMenuText(
+                      menu.name,
+                      language,
+                      messages
+                        .unnamedMenu
+                    )}
                   </option>
                 )
               )}
@@ -331,8 +420,10 @@ export default function EditCategoryModal({
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Nombre
+            <label className="mb-2 block text-sm">
+              {
+                messages.name
+              }
             </label>
 
             <input
@@ -343,17 +434,18 @@ export default function EditCategoryModal({
                 event
               ) =>
                 setName(
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Descripción
+            <label className="mb-2 block text-sm">
+              {
+                messages.description
+              }
             </label>
 
             <textarea
@@ -364,20 +456,21 @@ export default function EditCategoryModal({
                 event
               ) =>
                 setDescription(
-                  event.target
-                    .value
+                  event.target.value
                 )
               }
               rows={
                 3
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Orden
+            <label className="mb-2 block text-sm">
+              {
+                messages.displayOrder
+              }
             </label>
 
             <input
@@ -393,12 +486,11 @@ export default function EditCategoryModal({
               ) =>
                 setDisplayOrder(
                   Number(
-                    event.target
-                      .value
+                    event.target.value
                   )
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             />
           </div>
 
@@ -412,17 +504,18 @@ export default function EditCategoryModal({
                 event
               ) =>
                 setActive(
-                  event.target
-                    .checked
+                  event.target.checked
                 )
               }
             />
 
-            Activa
+            {
+              messages.activeLabel
+            }
           </label>
         </div>
 
-        <div className="border-t p-6 flex justify-end gap-3">
+        <div className="flex justify-end gap-3 border-t p-6">
           <button
             type="button"
             onClick={
@@ -431,9 +524,11 @@ export default function EditCategoryModal({
             disabled={
               saving
             }
-            className="px-5 py-3 border rounded-xl"
+            className="rounded-xl border px-5 py-3"
           >
-            Cancelar
+            {
+              messages.cancel
+            }
           </button>
 
           <button
@@ -444,11 +539,11 @@ export default function EditCategoryModal({
             onClick={() =>
               void updateCategory()
             }
-            className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-xl bg-indigo-600 px-5 py-3 text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             {saving
-              ? "Guardando..."
-              : "Guardar cambios"}
+              ? messages.saving
+              : messages.saveChanges}
           </button>
         </div>
       </div>

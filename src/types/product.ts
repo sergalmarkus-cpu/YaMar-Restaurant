@@ -1,25 +1,36 @@
 export interface Product {
+  id: number;
 
-    id:number;
+  name: string;
 
-    name:string;
+  description: string;
 
-    description:string;
+  nameTranslations:
+    Record<
+      string,
+      string
+    >;
 
-    categoryId:number;
+  descriptionTranslations:
+    Record<
+      string,
+      string
+    >;
 
-    category:string;
+  categoryId: number;
 
-    price:number;
+  category: string;
 
-    image:string | null;
+  price: number;
 
-    available:boolean;
+  image:
+    string | null;
 
-    featured:boolean;
+  available: boolean;
 
-    dailySpecial:boolean;
+  featured: boolean;
 
-    active:boolean;
+  dailySpecial: boolean;
 
+  active: boolean;
 }

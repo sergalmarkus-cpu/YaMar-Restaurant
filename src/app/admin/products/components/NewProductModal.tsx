@@ -10,17 +10,34 @@ import {
 } from "sonner";
 
 import {
+  ADMIN_PRODUCTS_MESSAGES,
+  getAdminProductText,
+} from "@/config/admin-products-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
 
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
 interface Category {
   id: number;
-  name: string;
+
+  name:
+    | string
+    | Record<
+        string,
+        string
+      >;
 }
 
 interface Props {
-  open:
-    boolean;
+  open: boolean;
+
+  currency:
+    string;
 
   onClose:
     () => void;
@@ -31,56 +48,64 @@ interface Props {
 
 export default function NewProductModal({
   open,
+  currency,
   onClose,
   onCreated,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_PRODUCTS_MESSAGES[
+      language
+    ];
+
   const [
     categories,
     setCategories,
   ] =
-    useState<
-      Category[]
-    >([]);
+    useState<Category[]>([]);
 
   const [
     name,
     setName,
   ] =
-    useState(
-      ""
-    );
+    useState("");
 
   const [
     categoryId,
     setCategoryId,
   ] =
-    useState(
-      ""
-    );
+    useState("");
 
   const [
     price,
     setPrice,
   ] =
-    useState(
-      ""
-    );
+    useState("");
 
   const [
     description,
     setDescription,
   ] =
-    useState(
-      ""
-    );
+    useState("");
 
   const [
     saving,
     setSaving,
   ] =
-    useState(
-      false
-    );
+    useState(false);
+
+  function currentMessages() {
+    return ADMIN_PRODUCTS_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
 
   useEffect(() => {
     if (!open) {
@@ -107,36 +132,15 @@ export default function NewProductModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudieron cargar las categorías."
+          currentMessages()
+            .loadCategoriesError
         );
 
         return;
       }
 
       setCategories(
-        json.data.map(
-          (
-            category:
-              any
-          ) => ({
-            id:
-              category.id,
-
-            name:
-              typeof category.name ===
-              "string"
-                ? category.name
-                : category.name?.es ??
-                  category.name?.en ??
-                  Object.values(
-                    category.name ??
-                      {}
-                  )[0] ??
-                  "",
-          })
-        )
+        json.data
       );
     } catch (
       error
@@ -147,12 +151,23 @@ export default function NewProductModal({
       );
 
       toast.error(
-        "No se pudieron cargar las categorías."
+        currentMessages()
+          .loadCategoriesError
       );
     }
   }
 
   async function saveProduct() {
+    const currentLanguage =
+      useAdminLanguageStore
+        .getState()
+        .language;
+
+    const activeMessages =
+      ADMIN_PRODUCTS_MESSAGES[
+        currentLanguage
+      ];
+
     const normalizedName =
       name.trim();
 
@@ -166,7 +181,8 @@ export default function NewProductModal({
       !normalizedName
     ) {
       toast.error(
-        "Introduce un nombre."
+        activeMessages
+          .nameRequired
       );
 
       return;
@@ -176,7 +192,8 @@ export default function NewProductModal({
       !categoryId
     ) {
       toast.error(
-        "Selecciona una categoría."
+        activeMessages
+          .categoryRequired
       );
 
       return;
@@ -186,7 +203,8 @@ export default function NewProductModal({
       !normalizedPrice
     ) {
       toast.error(
-        "Introduce un precio."
+        activeMessages
+          .priceRequired
       );
 
       return;
@@ -205,25 +223,16 @@ export default function NewProductModal({
         0
     ) {
       toast.error(
-        "Introduce un precio válido."
+        activeMessages
+          .priceInvalid
       );
 
       return;
     }
 
-    setSaving(
-      true
-    );
+    setSaving(true);
 
     try {
-      /*
-       * IMPORTANTE:
-       *
-       * No enviamos establishmentId.
-       *
-       * El backend lo obtiene exclusivamente
-       * del JWT del usuario autenticado.
-       */
       const payload = {
         categoryId:
           Number(
@@ -231,14 +240,14 @@ export default function NewProductModal({
           ),
 
         name: {
-          es:
+          [currentLanguage]:
             normalizedName,
         },
 
         description:
           normalizedDescription
             ? {
-                es:
+                [currentLanguage]:
                   normalizedDescription,
               }
             : {},
@@ -313,30 +322,21 @@ export default function NewProductModal({
         toast.error(
           json.error ||
             json.message ||
-            "No se pudo crear el producto."
+            activeMessages
+              .createError
         );
 
         return;
       }
 
-      setName(
-        ""
-      );
-
-      setDescription(
-        ""
-      );
-
-      setPrice(
-        ""
-      );
-
-      setCategoryId(
-        ""
-      );
+      setName("");
+      setDescription("");
+      setPrice("");
+      setCategoryId("");
 
       toast.success(
-        "Producto creado correctamente."
+        activeMessages
+          .createSuccess
       );
 
       await onCreated();
@@ -351,34 +351,40 @@ export default function NewProductModal({
       );
 
       toast.error(
-        "Se produjo un error al crear el producto."
+        activeMessages
+          .createUnexpectedError
       );
     } finally {
-      setSaving(
-        false
-      );
+      setSaving(false);
     }
   }
 
-  if (
-    !open
-  ) {
+  if (!open) {
     return null;
   }
+
+  const priceLabel =
+    currency
+      ? `${messages.price} (${currency})`
+      : messages.price;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5">
       <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
         <div className="border-b p-6">
           <h2 className="text-xl font-bold">
-            Nuevo producto
+            {
+              messages.createTitle
+            }
           </h2>
         </div>
 
         <div className="space-y-5 p-6">
           <div>
             <label className="mb-2 block text-sm font-medium">
-              Nombre
+              {
+                messages.name
+              }
             </label>
 
             <input
@@ -401,7 +407,9 @@ export default function NewProductModal({
 
           <div>
             <label className="mb-2 block text-sm font-medium">
-              Categoría
+              {
+                messages.category
+              }
             </label>
 
             <select
@@ -421,7 +429,9 @@ export default function NewProductModal({
               }
             >
               <option value="">
-                Seleccionar...
+                {
+                  messages.selectCategory
+                }
               </option>
 
               {categories.map(
@@ -438,9 +448,12 @@ export default function NewProductModal({
                       )
                     }
                   >
-                    {
-                      category.name
-                    }
+                    {getAdminProductText(
+                      category.name,
+                      language,
+                      messages
+                        .unnamedCategory
+                    )}
                   </option>
                 )
               )}
@@ -449,7 +462,9 @@ export default function NewProductModal({
 
           <div>
             <label className="mb-2 block text-sm font-medium">
-              Precio (€)
+              {
+                priceLabel
+              }
             </label>
 
             <input
@@ -475,7 +490,9 @@ export default function NewProductModal({
 
           <div>
             <label className="mb-2 block text-sm font-medium">
-              Descripción
+              {
+                messages.description
+              }
             </label>
 
             <textarea
@@ -511,7 +528,9 @@ export default function NewProductModal({
             }
             className="rounded-xl border px-5 py-3 disabled:opacity-50"
           >
-            Cancelar
+            {
+              messages.cancel
+            }
           </button>
 
           <button
@@ -525,8 +544,8 @@ export default function NewProductModal({
             className="rounded-xl bg-indigo-600 px-5 py-3 text-white transition hover:bg-indigo-700 disabled:opacity-50"
           >
             {saving
-              ? "Guardando..."
-              : "Guardar"}
+              ? messages.saving
+              : messages.save}
           </button>
         </div>
       </div>

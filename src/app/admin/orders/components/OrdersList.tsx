@@ -6,12 +6,20 @@ import {
 } from "react";
 
 import {
+  ADMIN_ORDERS_MESSAGES,
+} from "@/config/admin-orders-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
 
-import StatsCards from "./StatsCards";
-import OrdersGrid from "./OrdersGrid";
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
 import EditOrderModal from "./EditOrderModal";
+import OrdersGrid from "./OrdersGrid";
+import StatsCards from "./StatsCards";
 
 interface Order {
   id: number;
@@ -23,12 +31,36 @@ interface Order {
   createdAt: string;
 }
 
+interface ApiEstablishment {
+  id: number;
+  currency?:
+    | string
+    | null;
+}
+
 export default function OrdersList() {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_ORDERS_MESSAGES[
+      language
+    ];
+
   const [
     orders,
     setOrders,
   ] =
     useState<Order[]>([]);
+
+  const [
+    currency,
+    setCurrency,
+  ] =
+    useState("");
 
   const [
     loading,
@@ -52,21 +84,65 @@ export default function OrdersList() {
 
   async function fetchOrders() {
     try {
-      const res =
-        await adminFetch(
-          "/api/orders"
-        );
+      const [
+        ordersRes,
+        establishmentsRes,
+      ] =
+        await Promise.all([
+          adminFetch(
+            "/api/orders"
+          ),
+          adminFetch(
+            "/api/establishments"
+          ),
+        ]);
 
-      const json =
-        await res.json();
+      const [
+        ordersJson,
+        establishmentsJson,
+      ] =
+        await Promise.all([
+          ordersRes.json(),
+          establishmentsRes.json(),
+        ]);
 
-      if (json.success) {
+      if (
+        ordersRes.ok &&
+        ordersJson.success
+      ) {
         setOrders(
-          json.data
+          Array.isArray(
+            ordersJson.data
+          )
+            ? ordersJson.data
+            : []
         );
       } else {
         console.error(
-          json.error
+          ordersJson.error ??
+            ordersJson.message
+        );
+      }
+
+      if (
+        establishmentsRes.ok &&
+        establishmentsJson.success &&
+        Array.isArray(
+          establishmentsJson.data
+        )
+      ) {
+        const establishments:
+          ApiEstablishment[] =
+            establishmentsJson.data;
+
+        const current =
+          establishments[0];
+
+        setCurrency(
+          current?.currency
+            ?.trim()
+            .toUpperCase() ??
+            ""
         );
       }
     } catch (error) {
@@ -89,7 +165,9 @@ export default function OrdersList() {
   ) {
     if (
       !confirm(
-        `¿Eliminar el pedido ${order.orderNumber}?`
+        messages.list.deleteConfirm(
+          order.orderNumber
+        )
       )
     ) {
       return;
@@ -113,12 +191,19 @@ export default function OrdersList() {
       } else {
         alert(
           json.error ??
-            "No se pudo eliminar el pedido."
+            json.message ??
+            messages.list
+              .deleteError
         );
       }
     } catch (error) {
       console.error(
         error
+      );
+
+      alert(
+        messages.list
+          .deleteError
       );
     }
   }
@@ -136,14 +221,8 @@ export default function OrdersList() {
   }
 
   function viewOrder(
-    order: Order
-  ) {
-    console.log(
-      order
-    );
-
-    // Más adelante abriremos un OrderDetailsModal.
-  }
+    _order: Order
+  ) {}
 
   const pending =
     orders.filter(
@@ -195,6 +274,9 @@ export default function OrdersList() {
         <OrdersGrid
           orders={
             orders
+          }
+          currency={
+            currency
           }
           onView={
             viewOrder

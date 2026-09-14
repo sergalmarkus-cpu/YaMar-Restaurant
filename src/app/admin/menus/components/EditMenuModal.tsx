@@ -10,8 +10,16 @@ import {
 } from "sonner";
 
 import {
+  ADMIN_MENUS_MESSAGES,
+} from "@/config/admin-menus-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Menu {
   id: number;
@@ -35,6 +43,17 @@ export default function EditMenuModal({
   onClose,
   onUpdated,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_MENUS_MESSAGES[
+      language
+    ];
+
   const [
     name,
     setName,
@@ -73,16 +92,32 @@ export default function EditMenuModal({
   ] =
     useState(false);
 
+  function currentMessages() {
+    return ADMIN_MENUS_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
+
   useEffect(() => {
     if (!menu) {
       return;
     }
 
+    const currentLanguage =
+      useAdminLanguageStore
+        .getState()
+        .language;
+
     setName(
       typeof menu.name ===
         "string"
         ? menu.name
-        : menu.name?.es ??
+        : menu.name?.[
+              currentLanguage
+            ] ??
+            menu.name?.es ??
             menu.name?.en ??
             ""
     );
@@ -106,6 +141,7 @@ export default function EditMenuModal({
     );
   }, [
     menu,
+    language,
   ]);
 
   if (
@@ -116,17 +152,22 @@ export default function EditMenuModal({
   }
 
   async function updateMenu() {
-    if (
-      !menu
-    ) {
+    const currentMenu =
+      menu;
+
+    if (!currentMenu) {
       return;
     }
+
+    const activeMessages =
+      currentMessages();
 
     if (
       !name.trim()
     ) {
       toast.error(
-        "Introduce un nombre para el menú."
+        activeMessages
+          .menuNameRequired
       );
 
       return;
@@ -137,9 +178,17 @@ export default function EditMenuModal({
     );
 
     try {
+      const existingNames =
+        typeof currentMenu.name ===
+          "object" &&
+        currentMenu.name !==
+          null
+          ? currentMenu.name
+          : {};
+
       const response =
         await adminFetch(
-          `/api/menus/${menu.id}`,
+          `/api/menus/${currentMenu.id}`,
           {
             method:
               "PUT",
@@ -152,7 +201,8 @@ export default function EditMenuModal({
             body:
               JSON.stringify({
                 name: {
-                  es:
+                  ...existingNames,
+                  [language]:
                     name.trim(),
                 },
 
@@ -176,29 +226,32 @@ export default function EditMenuModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudo actualizar el menú."
+          activeMessages
+            .editError
         );
 
         return;
       }
 
       toast.success(
-        "Menú actualizado."
+        activeMessages
+          .editSuccess
       );
 
       await onUpdated();
 
       onClose();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error updating menu:",
         error
       );
 
       toast.error(
-        "No se pudo actualizar el menú."
+        activeMessages
+          .editError
       );
     } finally {
       setSaving(
@@ -208,18 +261,22 @@ export default function EditMenuModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-5">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5">
+      <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
         <div className="border-b p-6">
           <h2 className="text-xl font-bold">
-            Editar menú
+            {
+              messages.editTitle
+            }
           </h2>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="space-y-5 p-6">
           <div>
-            <label className="block text-sm mb-2">
-              Nombre
+            <label className="mb-2 block text-sm">
+              {
+                messages.menuName
+              }
             </label>
 
             <input
@@ -233,13 +290,15 @@ export default function EditMenuModal({
                   event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Tipo
+            <label className="mb-2 block text-sm">
+              {
+                messages.menuType
+              }
             </label>
 
             <select
@@ -253,41 +312,57 @@ export default function EditMenuModal({
                   event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             >
               <option value="restaurant">
-                Restaurante
+                {
+                  messages.restaurant
+                }
               </option>
 
               <option value="snacks">
-                Snacks
+                {
+                  messages.snacks
+                }
               </option>
 
               <option value="coffee">
-                Cafetería
+                {
+                  messages.coffee
+                }
               </option>
 
               <option value="cocktails">
-                Cócteles
+                {
+                  messages.cocktails
+                }
               </option>
 
               <option value="breakfast">
-                Desayunos
+                {
+                  messages.breakfast
+                }
               </option>
 
               <option value="desserts">
-                Postres
+                {
+                  messages.desserts
+                }
               </option>
 
               <option value="custom">
-                Personalizado
+                {
+                  messages.custom
+                }
               </option>
             </select>
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Icono
+            <label className="mb-2 block text-sm">
+              {
+                messages.icon
+              }
             </label>
 
             <input
@@ -301,20 +376,20 @@ export default function EditMenuModal({
                   event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Orden
+            <label className="mb-2 block text-sm">
+              {
+                messages.displayOrder
+              }
             </label>
 
             <input
               type="number"
-              min={
-                0
-              }
+              min={0}
               value={
                 displayOrder
               }
@@ -327,13 +402,15 @@ export default function EditMenuModal({
                   )
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             />
           </div>
 
-          <div className="flex items-center justify-between border rounded-xl p-4">
+          <div className="flex items-center justify-between rounded-xl border p-4">
             <span>
-              Menú activo
+              {
+                messages.activeMenu
+              }
             </span>
 
             <input
@@ -352,7 +429,7 @@ export default function EditMenuModal({
           </div>
         </div>
 
-        <div className="border-t p-6 flex justify-end gap-3">
+        <div className="flex justify-end gap-3 border-t p-6">
           <button
             type="button"
             onClick={
@@ -361,9 +438,11 @@ export default function EditMenuModal({
             disabled={
               saving
             }
-            className="px-5 py-3 border rounded-xl"
+            className="rounded-xl border px-5 py-3"
           >
-            Cancelar
+            {
+              messages.cancel
+            }
           </button>
 
           <button
@@ -374,11 +453,11 @@ export default function EditMenuModal({
             onClick={() =>
               void updateMenu()
             }
-            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl disabled:opacity-50"
+            className="rounded-xl bg-indigo-600 px-5 py-3 text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             {saving
-              ? "Guardando..."
-              : "Guardar cambios"}
+              ? messages.saving
+              : messages.saveChanges}
           </button>
         </div>
       </div>

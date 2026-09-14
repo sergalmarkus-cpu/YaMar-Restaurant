@@ -13,6 +13,14 @@ import {
   useAdminAuthStore,
 } from "@/auth/admin-auth.store";
 
+import {
+  ADMIN_AUTH_GUARD_MESSAGES,
+} from "@/config/admin-auth-guard-i18n";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
 export default function AdminAuthGuard({
   children,
 }: {
@@ -32,13 +40,28 @@ export default function AdminAuthGuard({
   } =
     useAdminAuthStore();
 
+  const language =
+    useAdminLanguageStore(
+      (
+        state
+      ) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_AUTH_GUARD_MESSAGES[
+      language
+    ];
+
   const isLoginPage =
     pathname ===
     "/admin/login";
 
   useEffect(
     () => {
-      if (!hydrated) {
+      if (
+        !hydrated
+      ) {
         return;
       }
 
@@ -82,25 +105,33 @@ export default function AdminAuthGuard({
     ]
   );
 
-  if (!hydrated) {
+  if (
+    !hydrated
+  ) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <p className="text-gray-500">
-          Cargando...
+          {
+            messages.loading
+          }
         </p>
       </div>
     );
   }
 
-  if (isLoginPage) {
+  if (
+    isLoginPage
+  ) {
     if (
       user &&
       refreshToken
     ) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="flex min-h-screen items-center justify-center bg-gray-50">
           <p className="text-gray-500">
-            Redirigiendo...
+            {
+              messages.redirecting
+            }
           </p>
         </div>
       );
@@ -118,9 +149,11 @@ export default function AdminAuthGuard({
     !refreshToken
   ) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <p className="text-gray-500">
-          Redirigiendo al inicio de sesión...
+          {
+            messages.redirectingToLogin
+          }
         </p>
       </div>
     );

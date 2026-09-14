@@ -8,6 +8,13 @@
       "when": 1788687684258,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789207039515,
+      "tag": "0001_flimsy_shaman",
+      "breakpoints": true
     }
   ]
 }

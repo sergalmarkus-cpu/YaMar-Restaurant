@@ -15,20 +15,31 @@ import {
 } from "sonner";
 
 import {
+  ADMIN_PRODUCTS_MESSAGES,
+  getAdminProductText,
+  toAdminProductTranslations,
+} from "@/config/admin-products-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
+import type {
+  Product,
+} from "@/types/product";
 
 import StatsCards from "./StatsCards";
 import ProductsGrid from "./ProductsGrid";
 import NewProductModal from "./NewProductModal";
 import EditProductModal from "./EditProductModal";
 
-import type {
-  Product,
-} from "@/types/product";
-
 interface ApiCategory {
   id: number;
+
   name:
     | string
     | Record<
@@ -57,111 +68,91 @@ interface ApiProduct {
       >
     | null;
 
-  price:
-    string;
+  price: string;
 
   image:
     string | null;
 
-  available:
-    boolean;
+  available: boolean;
 
-  featured:
-    boolean;
+  featured: boolean;
 
-  dailySpecial:
-    boolean;
+  dailySpecial: boolean;
 
-  active:
-    boolean;
+  active: boolean;
 }
 
-function getLocalizedText(
-  value:
-    | string
-    | Record<
-        string,
-        string
-      >
-    | null
-    | undefined
-) {
-  if (
-    typeof value ===
-    "string"
-  ) {
-    return value;
-  }
-
-  if (!value) {
-    return "";
-  }
-
-  return (
-    value.es ||
-    value.en ||
-    Object.values(
-      value
-    )[0] ||
-    ""
-  );
+interface ApiEstablishment {
+  id: number;
+  currency?: string | null;
 }
 
 export default function ProductsList() {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_PRODUCTS_MESSAGES[
+      language
+    ];
+
   const [
     products,
     setProducts,
   ] =
-    useState<
-      Product[]
-    >([]);
+    useState<Product[]>([]);
 
   const [
     loading,
     setLoading,
   ] =
-    useState(
-      true
-    );
+    useState(true);
+
+  const [
+    currency,
+    setCurrency,
+  ] =
+    useState("");
 
   const [
     newModalOpen,
     setNewModalOpen,
   ] =
-    useState(
-      false
-    );
+    useState(false);
 
   const [
     editingProduct,
     setEditingProduct,
   ] =
-    useState<
-      Product | null
-    >(null);
+    useState<Product | null>(
+      null
+    );
+
+  function currentMessages() {
+    return ADMIN_PRODUCTS_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
 
   useEffect(() => {
     void fetchProducts();
-  }, []);
+  }, [
+    language,
+  ]);
 
   async function fetchProducts() {
-    setLoading(
-      true
-    );
+    setLoading(true);
 
     try {
-      /*
-       * Categories y Products están protegidos.
-       *
-       * adminFetch gestiona automáticamente:
-       * - Authorization
-       * - access token caducado
-       * - refresh token
-       * - repetición de la petición
-       */
       const [
         categoriesRes,
         productsRes,
+        establishmentsRes,
       ] =
         await Promise.all([
           adminFetch(
@@ -171,15 +162,21 @@ export default function ProductsList() {
           adminFetch(
             "/api/products"
           ),
+
+          adminFetch(
+            "/api/establishments"
+          ),
         ]);
 
       const [
         categoriesJson,
         productsJson,
+        establishmentsJson,
       ] =
         await Promise.all([
           categoriesRes.json(),
           productsRes.json(),
+          establishmentsRes.json(),
         ]);
 
       if (
@@ -187,9 +184,8 @@ export default function ProductsList() {
         !categoriesJson.success
       ) {
         toast.error(
-          categoriesJson.error ||
-            categoriesJson.message ||
-            "No se pudieron cargar las categorías."
+          currentMessages()
+            .loadCategoriesError
         );
 
         return;
@@ -200,9 +196,8 @@ export default function ProductsList() {
         !productsJson.success
       ) {
         toast.error(
-          productsJson.error ||
-            productsJson.message ||
-            "No se pudieron cargar los productos."
+          currentMessages()
+            .loadProductsError
         );
 
         return;
@@ -215,6 +210,28 @@ export default function ProductsList() {
       const apiProducts:
         ApiProduct[] =
           productsJson.data;
+
+      if (
+        establishmentsRes.ok &&
+        establishmentsJson.success
+      ) {
+        const establishments:
+          ApiEstablishment[] =
+            Array.isArray(
+              establishmentsJson.data
+            )
+              ? establishmentsJson.data
+              : [];
+
+        const current =
+          establishments[0];
+
+        setCurrency(
+          current?.currency?.trim()
+            .toUpperCase() ??
+            ""
+        );
+      }
 
       const formatted:
         Product[] =
@@ -231,29 +248,54 @@ export default function ProductsList() {
                     product.categoryId
                 );
 
+              const nameTranslations =
+                toAdminProductTranslations(
+                  product.name,
+                  language
+                );
+
+              const descriptionTranslations =
+                toAdminProductTranslations(
+                  product.description,
+                  language
+                );
+
               return {
                 id:
                   product.id,
 
                 name:
-                  getLocalizedText(
-                    product.name
+                  getAdminProductText(
+                    product.name,
+                    language,
+                    messages
+                      .unnamedProduct
                   ),
 
                 description:
-                  getLocalizedText(
-                    product.description
+                  getAdminProductText(
+                    product.description,
+                    language,
+                    ""
                   ),
+
+                nameTranslations,
+
+                descriptionTranslations,
 
                 categoryId:
                   product.categoryId,
 
                 category:
                   category
-                    ? getLocalizedText(
-                        category.name
+                    ? getAdminProductText(
+                        category.name,
+                        language,
+                        messages
+                          .unnamedCategory
                       )
-                    : "Sin categoría",
+                    : messages
+                        .unnamedCategory,
 
                 price:
                   Number(
@@ -290,22 +332,23 @@ export default function ProductsList() {
       );
 
       toast.error(
-        "Error cargando productos."
+        currentMessages()
+          .loadError
       );
     } finally {
-      setLoading(
-        false
-      );
+      setLoading(false);
     }
   }
 
   async function deleteProduct(
-    product:
-      Product
+    product: Product
   ) {
+    const activeMessages =
+      currentMessages();
+
     if (
       !window.confirm(
-        `¿Eliminar "${product.name}"?`
+        `${activeMessages.deleteConfirmPrefix} "${product.name}"?`
       )
     ) {
       return;
@@ -331,14 +374,16 @@ export default function ProductsList() {
         toast.error(
           json.error ||
             json.message ||
-            "No se pudo eliminar el producto."
+            activeMessages
+              .deleteError
         );
 
         return;
       }
 
       toast.success(
-        "Producto eliminado."
+        activeMessages
+          .deleteSuccess
       );
 
       await fetchProducts();
@@ -351,15 +396,18 @@ export default function ProductsList() {
       );
 
       toast.error(
-        "No se pudo eliminar el producto."
+        activeMessages
+          .deleteError
       );
     }
   }
 
   async function toggleProduct(
-    product:
-      Product
+    product: Product
   ) {
+    const activeMessages =
+      currentMessages();
+
     try {
       const res =
         await adminFetch(
@@ -391,7 +439,8 @@ export default function ProductsList() {
         toast.error(
           json.error ||
             json.message ||
-            "No se pudo actualizar el producto."
+            activeMessages
+              .updateError
         );
 
         return;
@@ -399,8 +448,10 @@ export default function ProductsList() {
 
       toast.success(
         product.available
-          ? "Producto marcado como no disponible."
-          : "Producto marcado como disponible."
+          ? activeMessages
+              .unavailableSuccess
+          : activeMessages
+              .availableSuccess
       );
 
       await fetchProducts();
@@ -413,7 +464,8 @@ export default function ProductsList() {
       );
 
       toast.error(
-        "No se pudo actualizar el producto."
+        activeMessages
+          .updateError
       );
     }
   }
@@ -469,11 +521,15 @@ export default function ProductsList() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">
-              Productos
+              {
+                messages.title
+              }
             </h1>
 
             <p className="mt-1 text-gray-500">
-              Gestiona todos los productos del restaurante.
+              {
+                messages.subtitle
+              }
             </p>
           </div>
 
@@ -492,7 +548,9 @@ export default function ProductsList() {
               }
             />
 
-            Nuevo producto
+            {
+              messages.newProduct
+            }
           </button>
         </div>
 
@@ -515,6 +573,9 @@ export default function ProductsList() {
           products={
             products
           }
+          currency={
+            currency
+          }
           onEdit={
             setEditingProduct
           }
@@ -530,6 +591,9 @@ export default function ProductsList() {
       <NewProductModal
         open={
           newModalOpen
+        }
+        currency={
+          currency
         }
         onClose={() =>
           setNewModalOpen(
@@ -548,6 +612,9 @@ export default function ProductsList() {
         }
         product={
           editingProduct
+        }
+        currency={
+          currency
         }
         onClose={() =>
           setEditingProduct(

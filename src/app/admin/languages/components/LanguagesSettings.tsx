@@ -22,6 +22,18 @@ import {
   useAdminAuthStore,
 } from "@/auth/admin-auth.store";
 
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
+import {
+  ADMIN_LANGUAGES,
+} from "@/config/admin-languages";
+
+import {
+  ADMIN_LANGUAGES_SETTINGS_I18N,
+} from "@/config/admin-languages-settings-i18n";
+
 import type {
   Language,
 } from "@/types";
@@ -40,18 +52,6 @@ interface LanguageSettingsResponse {
   supportedLanguages: SupportedLanguage[];
 }
 
-const FALLBACK_LANGUAGE_LABELS: Record<
-  Language,
-  string
-> = {
-  es: "Español",
-  en: "English",
-  de: "Deutsch",
-  fr: "Français",
-  it: "Italiano",
-  pt: "Português",
-};
-
 const LANGUAGE_ORDER: Language[] = [
   "es",
   "en",
@@ -61,6 +61,21 @@ const LANGUAGE_ORDER: Language[] = [
   "pt",
 ];
 
+const LANGUAGE_LABELS: Record<
+  Language,
+  string
+> = Object.fromEntries(
+  ADMIN_LANGUAGES.map(
+    (language) => [
+      language.code,
+      language.label,
+    ]
+  )
+) as Record<
+  Language,
+  string
+>;
+
 function getLanguageLabel(
   language: SupportedLanguage
 ) {
@@ -68,7 +83,7 @@ function getLanguageLabel(
     language.nativeName ||
     language.label ||
     language.name ||
-    FALLBACK_LANGUAGE_LABELS[
+    LANGUAGE_LABELS[
       language.code
     ] ||
     language.code.toUpperCase()
@@ -81,6 +96,17 @@ export default function LanguagesSettings() {
       (state) =>
         state.user
     );
+
+  const adminLanguage =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const t =
+    ADMIN_LANGUAGES_SETTINGS_I18N[
+      adminLanguage
+    ];
 
   const canEdit =
     user?.role ===
@@ -119,14 +145,6 @@ export default function LanguagesSettings() {
     );
 
   const [
-    enabledLanguages,
-    setEnabledLanguages,
-  ] =
-    useState<Language[]>([
-      "es",
-    ]);
-
-  const [
     supportedLanguages,
     setSupportedLanguages,
   ] =
@@ -158,7 +176,8 @@ export default function LanguagesSettings() {
       ) {
         setError(
           json.error ||
-            "No se pudo cargar la configuración de idiomas."
+            json.message ||
+            t.loadError
         );
 
         return;
@@ -167,13 +186,15 @@ export default function LanguagesSettings() {
       const data =
         json.data as LanguageSettingsResponse;
 
-      setDefaultLanguage(
-        data.defaultLanguage
-      );
-
-      setEnabledLanguages(
-        data.enabledLanguages
-      );
+      if (
+        LANGUAGE_ORDER.includes(
+          data.defaultLanguage
+        )
+      ) {
+        setDefaultLanguage(
+          data.defaultLanguage
+        );
+      }
 
       setSupportedLanguages(
         Array.isArray(
@@ -183,15 +204,15 @@ export default function LanguagesSettings() {
           : []
       );
     } catch (
-      error
+      loadError
     ) {
       console.error(
         "Error loading language settings:",
-        error
+        loadError
       );
 
       setError(
-        "No se pudo cargar la configuración de idiomas."
+        t.loadError
       );
     } finally {
       setLoading(
@@ -203,110 +224,48 @@ export default function LanguagesSettings() {
   const languages =
     useMemo(
       () => {
-        const fromApi =
-          supportedLanguages
-            .filter(
-              (
-                language
-              ): language is SupportedLanguage =>
-                Boolean(
-                  language &&
-                    language.code
-                )
-            )
-            .sort(
-              (
-                a,
-                b
-              ) =>
-                LANGUAGE_ORDER.indexOf(
-                  a.code
-                ) -
-                LANGUAGE_ORDER.indexOf(
-                  b.code
-                )
-            );
+        const apiMap =
+          new Map<
+            Language,
+            SupportedLanguage
+          >();
 
-        if (
-          fromApi.length >
-          0
+        for (
+          const language
+          of supportedLanguages
         ) {
-          return fromApi;
+          if (
+            language?.code &&
+            LANGUAGE_ORDER.includes(
+              language.code
+            )
+          ) {
+            apiMap.set(
+              language.code,
+              language
+            );
+          }
         }
 
         return LANGUAGE_ORDER.map(
           (
             code
-          ) => ({
-            code,
-            nativeName:
-              FALLBACK_LANGUAGE_LABELS[
-                code
-              ],
-          })
+          ) =>
+            apiMap.get(
+              code
+            ) ?? {
+              code,
+              nativeName:
+                LANGUAGE_LABELS[
+                  code
+                ],
+            }
         );
       },
       [
         supportedLanguages,
       ]
     );
-
-  function isEnabled(
-    language: Language
-  ) {
-    return enabledLanguages.includes(
-      language
-    );
-  }
-
-  function toggleLanguage(
-    language: Language
-  ) {
-    if (
-      !canEdit
-    ) {
-      return;
-    }
-
-    setError("");
-    setSuccess("");
-
-    if (
-      language ===
-      defaultLanguage
-    ) {
-      setError(
-        "El idioma predeterminado no puede desactivarse."
-      );
-
-      return;
-    }
-
-    setEnabledLanguages(
-      (
-        current
-      ) => {
-        if (
-          current.includes(
-            language
-          )
-        ) {
-          return current.filter(
-            (
-              item
-            ) =>
-              item !==
-              language
-          );
-        }
-
-        return [
-          ...current,
-          language,
-        ];
-      }
-    );
-  }
 
   function changeDefaultLanguage(
     language: Language
@@ -323,25 +282,6 @@ export default function LanguagesSettings() {
     setDefaultLanguage(
       language
     );
-
-    setEnabledLanguages(
-      (
-        current
-      ) => {
-        if (
-          current.includes(
-            language
-          )
-        ) {
-          return current;
-        }
-
-        return [
-          ...current,
-          language,
-        ];
-      }
-    );
   }
 
   async function saveSettings() {
@@ -356,16 +296,6 @@ export default function LanguagesSettings() {
     setSaving(true);
 
     try {
-      const orderedEnabled =
-        LANGUAGE_ORDER.filter(
-          (
-            language
-          ) =>
-            enabledLanguages.includes(
-              language
-            )
-        );
-
       const response =
         await adminFetch(
           "/api/languages",
@@ -381,8 +311,9 @@ export default function LanguagesSettings() {
             body:
               JSON.stringify({
                 defaultLanguage,
+
                 enabledLanguages:
-                  orderedEnabled,
+                  LANGUAGE_ORDER,
               }),
           }
         );
@@ -396,7 +327,8 @@ export default function LanguagesSettings() {
       ) {
         setError(
           json.error ||
-            "No se pudo guardar la configuración de idiomas."
+            json.message ||
+            t.saveError
         );
 
         return;
@@ -407,10 +339,6 @@ export default function LanguagesSettings() {
 
       setDefaultLanguage(
         data.defaultLanguage
-      );
-
-      setEnabledLanguages(
-        data.enabledLanguages
       );
 
       if (
@@ -424,18 +352,18 @@ export default function LanguagesSettings() {
       }
 
       setSuccess(
-        "Configuración de idiomas guardada correctamente."
+        t.saveSuccess
       );
     } catch (
-      error
+      saveError
     ) {
       console.error(
         "Error saving language settings:",
-        error
+        saveError
       );
 
       setError(
-        "No se pudo guardar la configuración de idiomas."
+        t.saveError
       );
     } finally {
       setSaving(
@@ -458,7 +386,7 @@ export default function LanguagesSettings() {
           />
 
           <span>
-            Cargando configuración de idiomas...
+            {t.loading}
           </span>
         </div>
       </div>
@@ -467,7 +395,6 @@ export default function LanguagesSettings() {
 
   return (
     <div className="space-y-6">
-
       <div>
         <div className="flex items-center gap-3">
           <Languages
@@ -479,11 +406,11 @@ export default function LanguagesSettings() {
 
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              Idiomas
+              {t.title}
             </h1>
 
             <p className="text-sm text-slate-500">
-              Configura los idiomas disponibles para los clientes del establecimiento.
+              {t.description}
             </p>
           </div>
         </div>
@@ -499,7 +426,7 @@ export default function LanguagesSettings() {
           />
 
           <div>
-            Puedes consultar la configuración de idiomas, pero solo un administrador puede modificarla.
+            {t.readOnlyNotice}
           </div>
         </div>
       )}
@@ -517,28 +444,21 @@ export default function LanguagesSettings() {
       )}
 
       <div className="rounded-2xl border bg-white shadow-sm">
-
         <div className="border-b px-6 py-5">
           <h2 className="font-semibold text-slate-900">
-            Idiomas disponibles
+            {t.availableTitle}
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Activa únicamente los idiomas que quieras ofrecer en la interfaz del cliente.
+            {t.availableDescription}
           </p>
         </div>
 
         <div className="divide-y">
-
           {languages.map(
             (
               language
             ) => {
-              const enabled =
-                isEnabled(
-                  language.code
-                );
-
               const isDefault =
                 language.code ===
                 defaultLanguage;
@@ -550,9 +470,7 @@ export default function LanguagesSettings() {
                   }
                   className="flex flex-col gap-4 px-6 py-5 sm:flex-row sm:items-center sm:justify-between"
                 >
-
                   <div className="flex items-center gap-4">
-
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-100 text-sm font-semibold uppercase text-slate-700">
                       {
                         language.code
@@ -561,7 +479,6 @@ export default function LanguagesSettings() {
 
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-
                         <span className="font-medium text-slate-900">
                           {
                             getLanguageLabel(
@@ -572,24 +489,26 @@ export default function LanguagesSettings() {
 
                         {isDefault && (
                           <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
-                            Predeterminado
+                            {
+                              t.defaultBadge
+                            }
                           </span>
                         )}
-
                       </div>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        Código:{" "}
+                        {
+                          t.codeLabel
+                        }
+                        :{" "}
                         {
                           language.code
                         }
                       </p>
                     </div>
-
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
-
                     <button
                       type="button"
                       onClick={() =>
@@ -604,75 +523,45 @@ export default function LanguagesSettings() {
                       className="rounded-lg border px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-50 disabled:text-slate-400"
                     >
                       {isDefault
-                        ? "Predeterminado"
-                        : "Usar como predeterminado"}
+                        ? t.defaultBadge
+                        : t.useAsDefault}
                     </button>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        toggleLanguage(
-                          language.code
-                        )
-                      }
-                      disabled={
-                        !canEdit ||
-                        isDefault
-                      }
-                      aria-pressed={
-                        enabled
-                      }
-                      className={`inline-flex min-w-[105px] items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                        enabled
-                          ? "bg-green-50 text-green-700 ring-1 ring-green-200"
-                          : "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
-                      } ${
-                        !canEdit ||
-                        isDefault
-                          ? "cursor-not-allowed opacity-70"
-                          : "hover:opacity-80"
-                      }`}
-                    >
-                      {enabled && (
-                        <Check
-                          size={
-                            16
-                          }
-                        />
-                      )}
+                    <div className="inline-flex min-w-[105px] items-center justify-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm font-medium text-green-700 ring-1 ring-green-200">
+                      <Check
+                        size={
+                          16
+                        }
+                      />
 
-                      {enabled
-                        ? "Activo"
-                        : "Inactivo"}
-                    </button>
-
+                      {
+                        t.active
+                      }
+                    </div>
                   </div>
-
                 </div>
               );
             }
           )}
-
         </div>
-
       </div>
 
       <div className="rounded-2xl border bg-white p-6 shadow-sm">
-
         <h2 className="font-semibold text-slate-900">
-          Resumen
+          {t.summaryTitle}
         </h2>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
-
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Idioma predeterminado
+              {
+                t.defaultLanguageLabel
+              }
             </p>
 
             <p className="mt-2 font-semibold text-slate-900">
               {
-                FALLBACK_LANGUAGE_LABELS[
+                LANGUAGE_LABELS[
                   defaultLanguage
                 ]
               }
@@ -681,22 +570,21 @@ export default function LanguagesSettings() {
 
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Idiomas activos
+              {
+                t.activeLanguagesLabel
+              }
             </p>
 
             <p className="mt-2 font-semibold text-slate-900">
               {
-                enabledLanguages.length
+                t.activeLanguagesValue
               }
             </p>
           </div>
-
         </div>
-
       </div>
 
       <div className="flex justify-end">
-
         <button
           type="button"
           onClick={() =>
@@ -717,7 +605,9 @@ export default function LanguagesSettings() {
                 className="animate-spin"
               />
 
-              Guardando...
+              {
+                t.saving
+              }
             </>
           ) : (
             <>
@@ -727,13 +617,13 @@ export default function LanguagesSettings() {
                 }
               />
 
-              Guardar cambios
+              {
+                t.saveChanges
+              }
             </>
           )}
         </button>
-
       </div>
-
     </div>
   );
 }

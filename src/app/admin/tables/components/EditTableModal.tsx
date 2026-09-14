@@ -1,7 +1,25 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import type { Table } from '@/types/table';
+import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  ADMIN_TABLES_MESSAGES,
+} from "@/config/admin-tables-i18n";
+
+import {
+  adminFetch,
+} from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
+import type {
+  Table,
+} from "@/types/table";
 
 interface Area {
   id: number;
@@ -21,228 +39,351 @@ export default function EditTableModal({
   onClose,
   onUpdated,
 }: Props) {
-
-  const [areas, setAreas] = useState<Area[]>([]);
-
-  const [code, setCode] = useState('');
-
-  const [capacity, setCapacity] = useState<number | null>(4);
-
-  const [areaId, setAreaId] = useState('');
-
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-
-    if (!open || !table) return;
-
-    setCode(table.code);
-
-    setCapacity(table.capacity ?? 4);
-
-    setAreaId(
-      table.areaId
-        ? table.areaId.toString()
-        : ''
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
     );
 
-    loadAreas();
+  const messages =
+    ADMIN_TABLES_MESSAGES[
+      language
+    ];
 
-  }, [open, table]);
+  const [
+    areas,
+    setAreas,
+  ] =
+    useState<Area[]>(
+      []
+    );
 
-  async function loadAreas() {
+  const [
+    code,
+    setCode,
+  ] =
+    useState(
+      ""
+    );
 
-    try {
+  const [
+    capacity,
+    setCapacity,
+  ] =
+    useState<number | null>(
+      4
+    );
 
-      const res = await fetch('/api/areas');
+  const [
+    areaId,
+    setAreaId,
+  ] =
+    useState(
+      ""
+    );
 
-      const json = await res.json();
+  const [
+    saving,
+    setSaving,
+  ] =
+    useState(
+      false
+    );
 
-      if (json.success) {
-        setAreas(json.data);
+  useEffect(
+    () => {
+      if (
+        !open ||
+        !table
+      ) {
+        return;
       }
 
-    } catch (err) {
+      setCode(
+        table.code
+      );
 
-      console.error(err);
+      setCapacity(
+        table.capacity ??
+          4
+      );
 
+      setAreaId(
+        table.areaId
+          ? table.areaId.toString()
+          : ""
+      );
+
+      void loadAreas();
+    },
+    [
+      open,
+      table,
+    ]
+  );
+
+  async function loadAreas() {
+    const currentMessages =
+      ADMIN_TABLES_MESSAGES[
+        useAdminLanguageStore
+          .getState()
+          .language
+      ];
+
+    try {
+      const response =
+        await adminFetch(
+          "/api/areas"
+        );
+
+      if (
+        !response.ok
+      ) {
+        throw new Error(
+          currentMessages.areasLoadError
+        );
+      }
+
+      const json =
+        await response.json();
+
+      if (
+        json.success
+      ) {
+        setAreas(
+          json.data
+        );
+      }
+    } catch (
+      error
+    ) {
+      console.error(
+        currentMessages.areasLoadError,
+        error
+      );
     }
-
   }
 
   async function saveChanges() {
-
-    if (!table) return;
-
-    setSaving(true);
-
-    try {
-
-      const res = await fetch(`/api/tables/${table.id}`, {
-
-        method: 'PUT',
-
-        headers: {
-
-          'Content-Type': 'application/json',
-
-        },
-
-        body: JSON.stringify({
-
-          code,
-
-          capacity,
-
-          areaId: areaId
-            ? Number(areaId)
-            : null,
-
-        }),
-
-      });
-
-      const json = await res.json();
-
-      if (json.success) {
-
-        onUpdated();
-
-        onClose();
-
-      }
-
-    } catch (err) {
-
-      console.error(err);
-
+    if (
+      !table
+    ) {
+      return;
     }
 
-    setSaving(false);
+    setSaving(
+      true
+    );
 
+    try {
+      const response =
+        await adminFetch(
+          `/api/tables/${table.id}`,
+          {
+            method:
+              "PUT",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify({
+                code,
+
+                capacity,
+
+                areaId:
+                  areaId
+                    ? Number(
+                        areaId
+                      )
+                    : null,
+              }),
+          }
+        );
+
+      const json =
+        await response.json();
+
+      if (
+        json.success
+      ) {
+        onUpdated();
+        onClose();
+      }
+    } catch (
+      error
+    ) {
+      console.error(
+        error
+      );
+    } finally {
+      setSaving(
+        false
+      );
+    }
   }
 
-  if (!open || !table) return null;
+  if (
+    !open ||
+    !table
+  ) {
+    return null;
+  }
 
   return (
-
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-5">
-
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl">
         <div className="border-b p-6">
-
           <h2 className="text-xl font-bold">
-
-            Editar Mesa
-
+            {
+              messages.editTitle
+            }
           </h2>
-
         </div>
 
-        <div className="p-6 space-y-5">
-
+        <div className="space-y-5 p-6">
           <div>
-
-            <label className="block text-sm mb-2">
-
-              Código
-
+            <label className="mb-2 block text-sm">
+              {
+                messages.code
+              }
             </label>
 
             <input
-              value={code}
-              onChange={(e)=>setCode(e.target.value)}
-              className="w-full border rounded-xl p-3"
+              value={
+                code
+              }
+              onChange={(
+                event
+              ) =>
+                setCode(
+                  event.target.value
+                )
+              }
+              disabled={
+                saving
+              }
+              className="w-full rounded-xl border p-3 disabled:opacity-50"
             />
-
           </div>
 
           <div>
-
-            <label className="block text-sm mb-2">
-
-              Área
-
+            <label className="mb-2 block text-sm">
+              {
+                messages.area
+              }
             </label>
 
             <select
-              value={areaId}
-              onChange={(e)=>setAreaId(e.target.value)}
-              className="w-full border rounded-xl p-3"
+              value={
+                areaId
+              }
+              onChange={(
+                event
+              ) =>
+                setAreaId(
+                  event.target.value
+                )
+              }
+              disabled={
+                saving
+              }
+              className="w-full rounded-xl border p-3 disabled:opacity-50"
             >
-
               <option value="">
-
-                Sin área
-
+                {
+                  messages.noArea
+                }
               </option>
 
-              {areas.map(area=>(
-
-                <option
-                  key={area.id}
-                  value={area.id}
-                >
-
-                  {area.name}
-
-                </option>
-
-              ))}
-
+              {areas.map(
+                (area) => (
+                  <option
+                    key={
+                      area.id
+                    }
+                    value={String(
+                      area.id
+                    )}
+                  >
+                    {
+                      area.name
+                    }
+                  </option>
+                )
+              )}
             </select>
-
           </div>
 
           <div>
-
-            <label className="block text-sm mb-2">
-
-              Capacidad
-
+            <label className="mb-2 block text-sm">
+              {
+                messages.capacity
+              }
             </label>
 
             <input
               type="number"
-              value={capacity ?? ''}
-              onChange={(e)=>setCapacity(Number(e.target.value))}
-              className="w-full border rounded-xl p-3"
+              min={1}
+              value={
+                capacity ??
+                ""
+              }
+              onChange={(
+                event
+              ) =>
+                setCapacity(
+                  Math.max(
+                    1,
+                    Number(
+                      event.target.value
+                    )
+                  )
+                )
+              }
+              disabled={
+                saving
+              }
+              className="w-full rounded-xl border p-3 disabled:opacity-50"
             />
-
           </div>
-
         </div>
 
-        <div className="border-t p-6 flex justify-end gap-3">
-
+        <div className="flex justify-end gap-3 border-t p-6">
           <button
-            onClick={onClose}
-            className="px-5 py-3 border rounded-xl"
+            type="button"
+            onClick={
+              onClose
+            }
+            disabled={
+              saving
+            }
+            className="rounded-xl border px-5 py-3 disabled:opacity-50"
           >
-
-            Cancelar
-
+            {
+              messages.cancel
+            }
           </button>
 
           <button
-            disabled={saving}
-            onClick={saveChanges}
-            className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50"
+            type="button"
+            disabled={
+              saving
+            }
+            onClick={() =>
+              void saveChanges()
+            }
+            className="rounded-xl bg-indigo-600 px-5 py-3 text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-
             {saving
-              ? 'Guardando...'
-              : 'Guardar cambios'}
-
+              ? messages.saving
+              : messages.saveChanges}
           </button>
-
         </div>
-
       </div>
-
     </div>
-
   );
-
 }

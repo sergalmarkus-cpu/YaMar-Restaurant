@@ -22,53 +22,102 @@ interface ClientAnalyticsDay {
 
 interface Props {
   data: ClientAnalyticsDay[];
+  locale: string;
+  title: string;
+  subtitle: string;
+  visitsLabel: string;
+  customersLabel: string;
+  newCustomersLabel: string;
+  returningCustomersLabel: string;
 }
 
-function getSeriesLabel(
-  name: string
+function formatDayLabel(
+  value: string,
+  locale: string
 ) {
-  switch (name) {
-    case "visits":
-      return "Visitas";
+  const date =
+    new Date(
+      `${value}T00:00:00`
+    );
 
-    case "customers":
-      return "Clientes";
-
-    case "newCustomers":
-      return "Nuevos";
-
-    case "returningCustomers":
-      return "Recurrentes";
-
-    default:
-      return name;
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
   }
+
+  return new Intl.DateTimeFormat(
+    locale,
+    {
+      day: "2-digit",
+      month: "short",
+    }
+  ).format(
+    date
+  );
 }
 
 export default function ClientAnalyticsChart({
   data,
+  locale,
+  title,
+  subtitle,
+  visitsLabel,
+  customersLabel,
+  newCustomersLabel,
+  returningCustomersLabel,
 }: Props) {
+  const localizedData =
+    data.map(
+      (
+        day
+      ) => ({
+        ...day,
+        localizedLabel:
+          formatDayLabel(
+            day.date,
+            locale
+          ),
+      })
+    );
+
+  const labels: Record<
+    string,
+    string
+  > = {
+    visits:
+      visitsLabel,
+    customers:
+      customersLabel,
+    newCustomers:
+      newCustomersLabel,
+    returningCustomers:
+      returningCustomersLabel,
+  };
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
       <div className="mb-5">
         <h2 className="text-lg font-semibold text-slate-900">
-          Evolución de clientes
+          {title}
         </h2>
 
         <p className="mt-1 text-sm text-slate-500">
-          Visitas y comportamiento de clientes durante el período seleccionado.
+          {subtitle}
         </p>
       </div>
 
       <div className="h-[360px] w-full">
-
         <ResponsiveContainer
           width="100%"
           height="100%"
         >
           <ComposedChart
-            data={data}
+            data={
+              localizedData
+            }
           >
             <CartesianGrid
               strokeDasharray="3 3"
@@ -76,7 +125,7 @@ export default function ClientAnalyticsChart({
             />
 
             <XAxis
-              dataKey="label"
+              dataKey="localizedLabel"
               stroke="#64748b"
               fontSize={12}
               minTickGap={20}
@@ -85,7 +134,9 @@ export default function ClientAnalyticsChart({
             <YAxis
               stroke="#64748b"
               fontSize={12}
-              allowDecimals={false}
+              allowDecimals={
+                false
+              }
             />
 
             <Tooltip
@@ -105,11 +156,14 @@ export default function ClientAnalyticsChart({
                   value ??
                     0
                 ),
-                getSeriesLabel(
+                labels[
                   String(
                     name
                   )
-                ),
+                ] ??
+                  String(
+                    name
+                  ),
               ]}
             />
 
@@ -147,7 +201,9 @@ export default function ClientAnalyticsChart({
               name="newCustomers"
               stroke="#059669"
               strokeWidth={2}
-              dot={false}
+              dot={
+                false
+              }
             />
 
             <Line
@@ -156,38 +212,35 @@ export default function ClientAnalyticsChart({
               name="returningCustomers"
               stroke="#d97706"
               strokeWidth={2}
-              dot={false}
+              dot={
+                false
+              }
             />
-
           </ComposedChart>
         </ResponsiveContainer>
-
       </div>
 
       <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-slate-600">
-
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-sm bg-indigo-200" />
-          Visitas
+          {visitsLabel}
         </div>
 
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-indigo-600" />
-          Clientes
+          {customersLabel}
         </div>
 
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-emerald-600" />
-          Nuevos
+          {newCustomersLabel}
         </div>
 
         <div className="flex items-center gap-2">
           <span className="h-3 w-3 rounded-full bg-amber-600" />
-          Recurrentes
+          {returningCustomersLabel}
         </div>
-
       </div>
-
     </div>
   );
 }

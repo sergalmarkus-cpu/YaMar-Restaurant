@@ -23,9 +23,12 @@ import {
   WalletCards,
 } from "lucide-react";
 
+import { adminFetch } from "@/lib/api/admin-fetch";
 import {
-  adminFetch,
-} from "@/lib/api/admin-fetch";
+  ADMIN_INVOICE_LOCALES,
+  getAdminInvoiceMessages,
+} from "@/config/admin-invoices-i18n";
+import { useAdminLanguageStore } from "@/store/admin-language.store";
 
 interface ReceiptItem {
   name?: string;
@@ -45,6 +48,10 @@ interface ReceiptRecord {
   total: string;
   items: unknown;
   createdAt: string;
+}
+
+interface EstablishmentRecord {
+  currency?: string | null;
 }
 
 interface MetricCardProps {
@@ -90,50 +97,6 @@ function MetricCard({
   );
 }
 
-function formatAmount(
-  value: string | number
-) {
-  const number =
-    Number(value);
-
-  if (!Number.isFinite(number)) {
-    return "—";
-  }
-
-  return new Intl.NumberFormat(
-    "es-ES",
-    {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }
-  ).format(number);
-}
-
-function formatDate(
-  value: string
-) {
-  const date =
-    new Date(value);
-
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat(
-    "es-ES",
-    {
-      dateStyle: "short",
-      timeStyle: "short",
-    }
-  ).format(date);
-}
-
 function normalizeItems(
   value: unknown
 ): ReceiptItem[] {
@@ -151,6 +114,21 @@ function normalizeItems(
 }
 
 export default function InvoicesManager() {
+  const language =
+    useAdminLanguageStore(
+      (state) => state.language
+    );
+
+  const messages =
+    getAdminInvoiceMessages(
+      language
+    );
+
+  const locale =
+    ADMIN_INVOICE_LOCALES[
+      language
+    ];
+
   const [
     receipts,
     setReceipts,
@@ -158,6 +136,12 @@ export default function InvoicesManager() {
     useState<
       ReceiptRecord[]
     >([]);
+
+  const [
+    currency,
+    setCurrency,
+  ] =
+    useState("");
 
   const [
     loading,
@@ -200,6 +184,106 @@ export default function InvoicesManager() {
       null
     >(null);
 
+  const formatAmount =
+    useCallback(
+      (
+        value:
+          string |
+          number
+      ) => {
+        const number =
+          Number(value);
+
+        if (
+          !Number.isFinite(
+            number
+          )
+        ) {
+          return "—";
+        }
+
+        if (!currency) {
+          return new Intl.NumberFormat(
+            locale,
+            {
+              minimumFractionDigits:
+                2,
+              maximumFractionDigits:
+                2,
+            }
+          ).format(
+            number
+          );
+        }
+
+        try {
+          return new Intl.NumberFormat(
+            locale,
+            {
+              style:
+                "currency",
+              currency,
+              minimumFractionDigits:
+                2,
+              maximumFractionDigits:
+                2,
+            }
+          ).format(
+            number
+          );
+        } catch {
+          return `${new Intl.NumberFormat(
+            locale,
+            {
+              minimumFractionDigits:
+                2,
+              maximumFractionDigits:
+                2,
+            }
+          ).format(number)} ${currency}`;
+        }
+      },
+      [
+        currency,
+        locale,
+      ]
+    );
+
+  const formatDate =
+    useCallback(
+      (
+        value: string
+      ) => {
+        const date =
+          new Date(
+            value
+          );
+
+        if (
+          Number.isNaN(
+            date.getTime()
+          )
+        ) {
+          return value;
+        }
+
+        return new Intl.DateTimeFormat(
+          locale,
+          {
+            dateStyle:
+              "short",
+            timeStyle:
+              "short",
+          }
+        ).format(
+          date
+        );
+      },
+      [
+        locale,
+      ]
+    );
+
   const loadReceipts =
     useCallback(
       async (
@@ -209,28 +293,44 @@ export default function InvoicesManager() {
         setError("");
 
         if (manualRefresh) {
-          setRefreshing(true);
+          setRefreshing(
+            true
+          );
         } else {
-          setLoading(true);
+          setLoading(
+            true
+          );
         }
 
         try {
-          const response =
-            await adminFetch(
-              "/api/receipts"
-            );
+          const [
+            receiptsResponse,
+            establishmentsResponse,
+          ] =
+            await Promise.all([
+              adminFetch(
+                "/api/receipts"
+              ),
+              adminFetch(
+                "/api/establishments"
+              ),
+            ]);
 
-          const json =
-            await response.json();
+          const [
+            receiptsJson,
+            establishmentsJson,
+          ] =
+            await Promise.all([
+              receiptsResponse.json(),
+              establishmentsResponse.json(),
+            ]);
 
           if (
-            !response.ok ||
-            !json.success
+            !receiptsResponse.ok ||
+            !receiptsJson.success
           ) {
             setError(
-              json.error ||
-                json.message ||
-                "No se pudieron cargar las facturas."
+              messages.loadError
             );
 
             return;
@@ -238,10 +338,10 @@ export default function InvoicesManager() {
 
           const rows =
             Array.isArray(
-              json.data
+              receiptsJson.data
             )
               ? (
-                  json.data as
+                  receiptsJson.data as
                     ReceiptRecord[]
                 )
               : [];
@@ -262,6 +362,30 @@ export default function InvoicesManager() {
           setReceipts(
             rows
           );
+
+          if (
+            establishmentsResponse.ok &&
+            establishmentsJson.success &&
+            Array.isArray(
+              establishmentsJson.data
+            )
+          ) {
+            const establishment =
+              establishmentsJson
+                .data[0] as
+                | EstablishmentRecord
+                | undefined;
+
+            setCurrency(
+              establishment
+                ?.currency
+                ?.trim()
+                .toUpperCase() ??
+                ""
+            );
+          } else {
+            setCurrency("");
+          }
         } catch (
           loadError
         ) {
@@ -271,7 +395,7 @@ export default function InvoicesManager() {
           );
 
           setError(
-            "No se pudieron cargar las facturas."
+            messages.loadError
           );
         } finally {
           setLoading(
@@ -283,7 +407,9 @@ export default function InvoicesManager() {
           );
         }
       },
-      []
+      [
+        messages.loadError,
+      ]
     );
 
   useEffect(
@@ -411,7 +537,7 @@ export default function InvoicesManager() {
           />
 
           <span>
-            Cargando facturas...
+            {messages.loading}
           </span>
         </div>
       </div>
@@ -420,15 +546,14 @@ export default function InvoicesManager() {
 
   return (
     <div className="space-y-6">
-
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">
-            Facturas
+            {messages.title}
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Consulta los recibos emitidos y su estado de envío.
+            {messages.description}
           </p>
         </div>
 
@@ -453,7 +578,7 @@ export default function InvoicesManager() {
             }
           />
 
-          Actualizar
+          {messages.refresh}
         </button>
       </div>
 
@@ -465,46 +590,70 @@ export default function InvoicesManager() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          title="Facturas emitidas"
+          title={
+            messages.metrics
+              .issued
+          }
           value={
             receipts.length
           }
-          subtitle="Recibos registrados"
+          subtitle={
+            messages.metrics
+              .issuedSubtitle
+          }
           icon={
             ReceiptText
           }
         />
 
         <MetricCard
-          title="Facturación total"
+          title={
+            messages.metrics
+              .total
+          }
           value={
             formatAmount(
               totalBilled
             )
           }
-          subtitle="Importe acumulado"
+          subtitle={
+            messages.metrics
+              .totalSubtitle
+          }
           icon={
             WalletCards
           }
         />
 
         <MetricCard
-          title="Enviadas"
+          title={
+            messages.metrics
+              .sent
+          }
           value={
             sentCount
           }
-          subtitle="Recibos enviados por email"
+          subtitle={
+            messages.metrics
+              .sentSubtitle
+          }
           icon={
             MailCheck
           }
         />
 
         <MetricCard
-          title="Pendientes de envío"
+          title={
+            messages.metrics
+              .pending
+          }
           value={
             pendingCount
           }
-          subtitle="Recibos todavía no enviados"
+          subtitle={
+            messages.metrics
+              .pendingSubtitle
+          }
           icon={
             Mail
           }
@@ -530,7 +679,10 @@ export default function InvoicesManager() {
                   event.target.value
                 )
               }
-              placeholder="Buscar por factura, ID, sesión o importe..."
+              placeholder={
+                messages.filters
+                  .search
+              }
               className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
             />
           </div>
@@ -551,33 +703,52 @@ export default function InvoicesManager() {
             className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           >
             <option value="all">
-              Todos los envíos
+              {
+                messages.filters
+                  .all
+              }
             </option>
 
             <option value="sent">
-              Enviadas
+              {
+                messages.filters
+                  .sent
+              }
             </option>
 
             <option value="pending">
-              Pendientes
+              {
+                messages.filters
+                  .pending
+              }
             </option>
           </select>
         </div>
 
         <p className="mt-3 text-xs text-slate-500">
-          {filteredReceipts.length} de{" "}
-          {receipts.length} facturas visibles.
+          {
+            messages.filters.visible(
+              filteredReceipts.length,
+              receipts.length
+            )
+          }
         </p>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-6 py-5">
           <h2 className="font-semibold text-slate-900">
-            Historial de facturas
+            {
+              messages.history
+                .title
+            }
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Las facturas más recientes aparecen primero.
+            {
+              messages.history
+                .description
+            }
           </p>
         </div>
 
@@ -590,11 +761,17 @@ export default function InvoicesManager() {
             />
 
             <p className="mt-4 font-medium text-slate-700">
-              No se encontraron facturas
+              {
+                messages.history
+                  .emptyTitle
+              }
             </p>
 
             <p className="mt-1 text-sm text-slate-500">
-              Cambia los filtros o espera a que se emita un nuevo recibo.
+              {
+                messages.history
+                  .emptyDescription
+              }
             </p>
           </div>
         ) : (
@@ -603,27 +780,45 @@ export default function InvoicesManager() {
               <thead className="bg-slate-50">
                 <tr>
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Factura
+                    {
+                      messages.table
+                        .invoice
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Sesión
+                    {
+                      messages.table
+                        .session
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Total
+                    {
+                      messages.table
+                        .total
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Email
+                    {
+                      messages.table
+                        .email
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Fecha
+                    {
+                      messages.table
+                        .date
+                    }
                   </th>
 
                   <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    Acciones
+                    {
+                      messages.table
+                        .actions
+                    }
                   </th>
                 </tr>
               </thead>
@@ -648,16 +843,19 @@ export default function InvoicesManager() {
                           receipt.id
                         }
                       >
-                        <tr
-                          className="align-top transition hover:bg-slate-50"
-                        >
+                        <tr className="align-top transition hover:bg-slate-50">
                           <td className="px-5 py-4">
                             <p className="font-semibold text-slate-900">
-                              {receipt.receiptNumber}
+                              {
+                                receipt.receiptNumber
+                              }
                             </p>
 
                             <p className="mt-1 text-xs text-slate-500">
-                              ID #{receipt.id}
+                              ID #
+                              {
+                                receipt.id
+                              }
                             </p>
                           </td>
 
@@ -668,15 +866,19 @@ export default function InvoicesManager() {
                               }
                               className="max-w-[190px] truncate text-sm text-slate-600"
                             >
-                              {receipt.sessionId}
+                              {
+                                receipt.sessionId
+                              }
                             </p>
                           </td>
 
                           <td className="whitespace-nowrap px-5 py-4 text-right">
                             <span className="font-semibold text-slate-900">
-                              {formatAmount(
-                                receipt.total
-                              )}
+                              {
+                                formatAmount(
+                                  receipt.total
+                                )
+                              }
                             </span>
                           </td>
 
@@ -687,7 +889,10 @@ export default function InvoicesManager() {
                                   size={13}
                                 />
 
-                                Enviada
+                                {
+                                  messages.emailStatus
+                                    .sent
+                                }
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-inset ring-amber-600/20">
@@ -695,28 +900,36 @@ export default function InvoicesManager() {
                                   size={13}
                                 />
 
-                                Pendiente
+                                {
+                                  messages.emailStatus
+                                    .pending
+                                }
                               </span>
                             )}
                           </td>
 
                           <td className="whitespace-nowrap px-5 py-4 text-sm text-slate-600">
-                            {formatDate(
-                              receipt.createdAt
-                            )}
+                            {
+                              formatDate(
+                                receipt.createdAt
+                              )
+                            }
                           </td>
 
                           <td className="px-5 py-4">
                             <div className="flex min-w-[150px] flex-col items-end gap-2">
                               <a
                                 href={
-                                  receipt.pdfUrl
+                                  `/api/receipts/${receipt.id}/pdf`
                                 }
                                 target="_blank"
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-600 hover:text-indigo-700"
                               >
-                                Ver PDF
+                                {
+                                  messages.actions
+                                    .viewPdf
+                                }
 
                                 <ExternalLink
                                   size={13}
@@ -735,8 +948,10 @@ export default function InvoicesManager() {
                                 className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900"
                               >
                                 {expanded
-                                  ? "Ocultar detalle"
-                                  : "Ver detalle"}
+                                  ? messages.actions
+                                      .hideDetail
+                                  : messages.actions
+                                      .showDetail}
 
                                 {expanded ? (
                                   <ChevronUp
@@ -753,9 +968,7 @@ export default function InvoicesManager() {
                         </tr>
 
                         {expanded && (
-                          <tr
-                            className="bg-slate-50/70"
-                          >
+                          <tr className="bg-slate-50/70">
                             <td
                               colSpan={
                                 6
@@ -766,31 +979,50 @@ export default function InvoicesManager() {
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                   <div>
                                     <h3 className="text-sm font-semibold text-slate-900">
-                                      Detalle de la factura
+                                      {
+                                        messages.detail
+                                          .title
+                                      }
                                     </h3>
 
                                     <p className="mt-1 text-xs text-slate-500">
-                                      {items.length}{" "}
+                                      {
+                                        items.length
+                                      }{" "}
                                       {items.length ===
                                       1
-                                        ? "línea"
-                                        : "líneas"}{" "}
-                                      registradas
+                                        ? messages.detail
+                                            .line
+                                        : messages.detail
+                                            .lines}{" "}
+                                      {
+                                        messages.detail
+                                          .registered
+                                      }
                                     </p>
                                   </div>
 
                                   <p className="text-sm font-semibold text-slate-900">
-                                    Total:{" "}
-                                    {formatAmount(
-                                      receipt.total
-                                    )}
+                                    {
+                                      messages.detail
+                                        .total
+                                    }
+                                    :{" "}
+                                    {
+                                      formatAmount(
+                                        receipt.total
+                                      )
+                                    }
                                   </p>
                                 </div>
 
                                 {items.length ===
                                 0 ? (
                                   <p className="mt-4 text-sm text-slate-500">
-                                    No hay detalle de artículos disponible.
+                                    {
+                                      messages.detail
+                                        .noItems
+                                    }
                                   </p>
                                 ) : (
                                   <div className="mt-4 overflow-x-auto">
@@ -798,19 +1030,31 @@ export default function InvoicesManager() {
                                       <thead>
                                         <tr className="border-b border-slate-200">
                                           <th className="pb-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            Producto
+                                            {
+                                              messages.detail
+                                                .product
+                                            }
                                           </th>
 
                                           <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            Cant.
+                                            {
+                                              messages.detail
+                                                .quantity
+                                            }
                                           </th>
 
                                           <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            Precio
+                                            {
+                                              messages.detail
+                                                .price
+                                            }
                                           </th>
 
                                           <th className="pb-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                            Subtotal
+                                            {
+                                              messages.detail
+                                                .subtotal
+                                            }
                                           </th>
                                         </tr>
                                       </thead>
@@ -828,7 +1072,8 @@ export default function InvoicesManager() {
                                                 {typeof item.name ===
                                                 "string"
                                                   ? item.name
-                                                  : "Producto"}
+                                                  : messages.detail
+                                                      .fallbackProduct}
                                               </td>
 
                                               <td className="px-4 py-3 text-right text-sm text-slate-600">

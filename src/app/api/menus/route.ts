@@ -1,18 +1,33 @@
-import { NextRequest, NextResponse } from "next/server";
+import {
+  NextRequest,
+  NextResponse,
+} from "next/server";
 
 import {
   ApiAuthError,
   authenticateRequest,
 } from "@/auth/api-auth";
 
-import { MenuCreateSchema } from "@/validations/menu.validation";
+import {
+  MenuCreateSchema,
+} from "@/validations/menu.validation";
 
-import { MenuService } from "@/services/menu.service";
-import { Logger } from "@/services/logger.service";
+import {
+  MenuService,
+} from "@/services/menu.service";
 
-import { ApiResponse } from "@/lib/api/ApiResponse";
+import {
+  Logger,
+} from "@/services/logger.service";
 
-const MANAGEMENT_ROLES = ["admin", "manager"] as const;
+import {
+  ApiResponse,
+} from "@/lib/api/ApiResponse";
+
+const MANAGEMENT_ROLES = [
+  "admin",
+  "manager",
+] as const;
 
 function isManagementRole(
   role: string
@@ -22,8 +37,12 @@ function isManagementRole(
   );
 }
 
-function handleAuthError(error: unknown) {
-  if (!(error instanceof ApiAuthError)) {
+function handleAuthError(
+  error: unknown
+) {
+  if (
+    !(error instanceof ApiAuthError)
+  ) {
     return null;
   }
 
@@ -32,45 +51,60 @@ function handleAuthError(error: unknown) {
       return NextResponse.json(
         {
           success: false,
-          error: "Authentication required",
+          error:
+            "Authentication required",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
 
     case "AUTH_HEADER_INVALID":
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid authorization header",
+          error:
+            "Invalid authorization header",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
 
     case "TOKEN_EXPIRED":
       return NextResponse.json(
         {
           success: false,
-          error: "Authentication token expired",
+          error:
+            "Authentication token expired",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
 
     case "TOKEN_INVALID":
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid authentication token",
+          error:
+            "Invalid authentication token",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
 
     default:
       return NextResponse.json(
         {
           success: false,
-          error: "Authentication failed",
+          error:
+            "Authentication failed",
         },
-        { status: 401 }
+        {
+          status: 401,
+        }
       );
   }
 }
@@ -80,7 +114,9 @@ export async function GET(
 ) {
   try {
     const authUser =
-      await authenticateRequest(request);
+      await authenticateRequest(
+        request
+      );
 
     const menus =
       await MenuService.list(
@@ -91,16 +127,22 @@ export async function GET(
       menus,
       "Menús obtenidos correctamente."
     );
-  } catch (error) {
+  } catch (
+    error
+  ) {
     Logger.error(
       "Error obteniendo menús.",
       error
     );
 
     const authResponse =
-      handleAuthError(error);
+      handleAuthError(
+        error
+      );
 
-    if (authResponse) {
+    if (
+      authResponse
+    ) {
       return authResponse;
     }
 
@@ -116,27 +158,36 @@ export async function POST(
 ) {
   try {
     const authUser =
-      await authenticateRequest(request);
+      await authenticateRequest(
+        request
+      );
 
-    if (!isManagementRole(authUser.role)) {
+    if (
+      !isManagementRole(
+        authUser.role
+      )
+    ) {
       return ApiResponse.error(
         "No tienes permisos para crear menús.",
         403
       );
     }
 
+    const requestBody =
+      await request.json();
+
     const body =
-      MenuCreateSchema.parse(
-        await request.json()
-      );
+      MenuCreateSchema.parse({
+        ...requestBody,
+
+        establishmentId:
+          authUser.establishmentId,
+      });
 
     const menu =
       await MenuService.create(
-        {
-          ...body,
-          establishmentId:
-            authUser.establishmentId,
-        }
+        body,
+        authUser.establishmentId
       );
 
     return ApiResponse.success(
@@ -144,20 +195,29 @@ export async function POST(
       "Menú creado correctamente.",
       201
     );
-  } catch (error: any) {
+  } catch (
+    error: any
+  ) {
     Logger.error(
       "Error creando menú.",
       error
     );
 
     const authResponse =
-      handleAuthError(error);
+      handleAuthError(
+        error
+      );
 
-    if (authResponse) {
+    if (
+      authResponse
+    ) {
       return authResponse;
     }
 
-    if (error?.name === "ZodError") {
+    if (
+      error?.name ===
+      "ZodError"
+    ) {
       return ApiResponse.error(
         "Datos inválidos.",
         400,

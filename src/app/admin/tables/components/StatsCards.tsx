@@ -1,9 +1,19 @@
+"use client";
+
 import {
-  Grid3X3,
-  CheckCircle,
-  XCircle,
   CalendarClock,
-} from 'lucide-react';
+  CheckCircle,
+  Grid3X3,
+  XCircle,
+} from "lucide-react";
+
+import {
+  ADMIN_TABLES_MESSAGES,
+} from "@/config/admin-tables-i18n";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Props {
   total: number;
@@ -18,82 +28,112 @@ export default function StatsCards({
   occupied,
   reserved,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_TABLES_MESSAGES[
+      language
+    ];
+
   const cards = [
     {
-      title: 'Total Mesas',
-      value: total,
-      icon: Grid3X3,
-      color: 'text-indigo-600',
-      bg: 'bg-indigo-50',
+      title:
+        messages.totalTables,
+      value:
+        total,
+      icon:
+        Grid3X3,
+      color:
+        "text-indigo-600",
+      bg:
+        "bg-indigo-50",
     },
     {
-      title: 'Disponibles',
-      value: available,
-      icon: CheckCircle,
-      color: 'text-green-600',
-      bg: 'bg-green-50',
+      title:
+        messages.availablePlural,
+      value:
+        available,
+      icon:
+        CheckCircle,
+      color:
+        "text-green-600",
+      bg:
+        "bg-green-50",
     },
     {
-      title: 'Ocupadas',
-      value: occupied,
-      icon: XCircle,
-      color: 'text-red-600',
-      bg: 'bg-red-50',
+      title:
+        messages.occupiedPlural,
+      value:
+        occupied,
+      icon:
+        XCircle,
+      color:
+        "text-red-600",
+      bg:
+        "bg-red-50",
     },
     {
-      title: 'Reservadas',
-      value: reserved,
-      icon: CalendarClock,
-      color: 'text-yellow-600',
-      bg: 'bg-yellow-50',
+      title:
+        messages.reservedPlural,
+      value:
+        reserved,
+      icon:
+        CalendarClock,
+      color:
+        "text-yellow-600",
+      bg:
+        "bg-yellow-50",
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      {cards.map(
+        (card) => {
+          const Icon =
+            card.icon;
 
-      {cards.map((card) => {
+          return (
+            <div
+              key={
+                card.title
+              }
+              className="rounded-2xl border bg-white p-6 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">
+                    {
+                      card.title
+                    }
+                  </p>
 
-        const Icon = card.icon;
+                  <h2 className="mt-2 text-3xl font-bold">
+                    {
+                      card.value
+                    }
+                  </h2>
+                </div>
 
-        return (
-
-          <div
-            key={card.title}
-            className="bg-white rounded-2xl border shadow-sm p-6"
-          >
-
-            <div className="flex items-center justify-between">
-
-              <div>
-
-                <p className="text-gray-500 text-sm">
-                  {card.title}
-                </p>
-
-                <h2 className="text-3xl font-bold mt-2">
-                  {card.value}
-                </h2>
-
+                <div
+                  className={`flex h-14 w-14 items-center justify-center rounded-xl ${card.bg}`}
+                >
+                  <Icon
+                    size={28}
+                    className={
+                      card.color
+                    }
+                  />
+                </div>
               </div>
-
-              <div
-                className={`w-14 h-14 rounded-xl flex items-center justify-center ${card.bg}`}
-              >
-                <Icon
-                  size={28}
-                  className={card.color}
-                />
-              </div>
-
             </div>
-
-          </div>
-
-        );
-
-      })}
-
+          );
+        }
+      )}
     </div>
   );
 }

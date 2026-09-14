@@ -15,8 +15,17 @@ import {
 } from "sonner";
 
 import {
+  ADMIN_CATEGORIES_MESSAGES,
+  getAdminCategoryText,
+} from "@/config/admin-categories-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 import StatsCards from "./StatsCards";
 import CategoriesGrid from "./CategoriesGrid";
@@ -34,6 +43,17 @@ interface Category {
 }
 
 export default function CategoriesList() {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_CATEGORIES_MESSAGES[
+      language
+    ];
+
   const [
     categories,
     setCategories,
@@ -60,6 +80,14 @@ export default function CategoriesList() {
       null
     );
 
+  function currentMessages() {
+    return ADMIN_CATEGORIES_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
+
   useEffect(() => {
     void loadCategories();
   }, []);
@@ -81,8 +109,8 @@ export default function CategoriesList() {
         !json.success
       ) {
         toast.error(
-          json.error ||
-            "No se pudieron cargar las categorías."
+          currentMessages()
+            .loadError
         );
 
         return;
@@ -91,35 +119,45 @@ export default function CategoriesList() {
       setCategories(
         json.data
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error loading categories:",
         error
       );
 
       toast.error(
-        "No se pudieron cargar las categorías."
+        currentMessages()
+          .loadError
       );
     } finally {
-      setLoading(
-        false
-      );
+      setLoading(false);
     }
   }
 
   async function deleteCategory(
     category: Category
   ) {
+    const activeMessages =
+      currentMessages();
+
+    const currentLanguage =
+      useAdminLanguageStore
+        .getState()
+        .language;
+
     const categoryName =
-      category.name.es ||
-      Object.values(
-        category.name
-      )[0] ||
-      `#${category.id}`;
+      getAdminCategoryText(
+        category.name,
+        currentLanguage,
+        activeMessages
+          .unnamedCategory
+      );
 
     if (
       !window.confirm(
-        `¿Eliminar "${categoryName}"?`
+        `${activeMessages.deleteConfirmPrefix} "${categoryName}"?`
       )
     ) {
       return;
@@ -144,25 +182,30 @@ export default function CategoriesList() {
       ) {
         toast.error(
           json.error ||
-            "No se pudo eliminar la categoría."
+            activeMessages
+              .deleteError
         );
 
         return;
       }
 
       toast.success(
-        "Categoría eliminada."
+        activeMessages
+          .deleteSuccess
       );
 
       await loadCategories();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error deleting category:",
         error
       );
 
       toast.error(
-        "No se pudo eliminar la categoría."
+        activeMessages
+          .deleteError
       );
     }
   }
@@ -170,6 +213,9 @@ export default function CategoriesList() {
   async function toggleCategory(
     category: Category
   ) {
+    const activeMessages =
+      currentMessages();
+
     try {
       const res =
         await adminFetch(
@@ -200,25 +246,30 @@ export default function CategoriesList() {
       ) {
         toast.error(
           json.error ||
-            "No se pudo actualizar la categoría."
+            activeMessages
+              .updateError
         );
 
         return;
       }
 
       toast.success(
-        "Estado actualizado."
+        activeMessages
+          .updateSuccess
       );
 
       await loadCategories();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error updating category:",
         error
       );
 
       toast.error(
-        "No se pudo actualizar."
+        activeMessages
+          .updateError
       );
     }
   }
@@ -263,7 +314,9 @@ export default function CategoriesList() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-gray-500">
-          Cargando categorías...
+          {
+            messages.loading
+          }
         </div>
       </div>
     );
@@ -274,11 +327,15 @@ export default function CategoriesList() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">
-            Categorías
+            {
+              messages.title
+            }
           </h1>
 
-          <p className="text-gray-500 mt-1">
-            Gestiona las categorías de los menús.
+          <p className="mt-1 text-gray-500">
+            {
+              messages.subtitle
+            }
           </p>
         </div>
 
@@ -289,7 +346,7 @@ export default function CategoriesList() {
               true
             )
           }
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl transition"
+          className="flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-white transition hover:bg-indigo-700"
         >
           <Plus
             size={
@@ -297,7 +354,9 @@ export default function CategoriesList() {
             }
           />
 
-          Nueva categoría
+          {
+            messages.newCategory
+          }
         </button>
       </div>
 

@@ -10,49 +10,41 @@ import {
 } from "sonner";
 
 import {
+  ADMIN_PRODUCTS_MESSAGES,
+  getAdminProductText,
+} from "@/config/admin-products-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
 
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
+import type {
+  Product,
+} from "@/types/product";
+
 interface Category {
-  id:
-    number;
+  id: number;
 
   name:
-    string;
-}
-
-interface Product {
-  id:
-    number;
-
-  name:
-    string;
-
-  description:
-    string;
-
-  categoryId:
-    number;
-
-  price:
-    number;
-
-  available:
-    boolean;
-
-  featured:
-    boolean;
-
-  dailySpecial:
-    boolean;
+    | string
+    | Record<
+        string,
+        string
+      >;
 }
 
 interface Props {
-  open:
-    boolean;
+  open: boolean;
 
   product:
     Product | null;
+
+  currency:
+    string;
 
   onClose:
     () => void;
@@ -64,80 +56,82 @@ interface Props {
 export default function EditProductModal({
   open,
   product,
+  currency,
   onClose,
   onUpdated,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_PRODUCTS_MESSAGES[
+      language
+    ];
+
   const [
     categories,
     setCategories,
   ] =
-    useState<
-      Category[]
-    >([]);
+    useState<Category[]>([]);
 
   const [
     name,
     setName,
   ] =
-    useState(
-      ""
-    );
+    useState("");
 
   const [
     description,
     setDescription,
   ] =
-    useState(
-      ""
-    );
+    useState("");
 
   const [
     categoryId,
     setCategoryId,
   ] =
-    useState(
-      ""
-    );
+    useState("");
 
   const [
     price,
     setPrice,
   ] =
-    useState(
-      ""
-    );
+    useState("");
 
   const [
     available,
     setAvailable,
   ] =
-    useState(
-      true
-    );
+    useState(true);
 
   const [
     featured,
     setFeatured,
   ] =
-    useState(
-      false
-    );
+    useState(false);
 
   const [
     dailySpecial,
     setDailySpecial,
   ] =
-    useState(
-      false
-    );
+    useState(false);
 
   const [
     saving,
     setSaving,
   ] =
-    useState(
-      false
-    );
+    useState(false);
+
+  function currentMessages() {
+    return ADMIN_PRODUCTS_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
 
   useEffect(() => {
     if (
@@ -148,11 +142,19 @@ export default function EditProductModal({
     }
 
     setName(
-      product.name
+      getAdminProductText(
+        product.nameTranslations,
+        language,
+        product.name
+      )
     );
 
     setDescription(
-      product.description
+      getAdminProductText(
+        product.descriptionTranslations,
+        language,
+        ""
+      )
     );
 
     setCategoryId(
@@ -179,6 +181,7 @@ export default function EditProductModal({
   }, [
     open,
     product,
+    language,
   ]);
 
   async function loadCategories() {
@@ -196,36 +199,15 @@ export default function EditProductModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudieron cargar las categorías."
+          currentMessages()
+            .loadCategoriesError
         );
 
         return;
       }
 
       setCategories(
-        json.data.map(
-          (
-            category:
-              any
-          ) => ({
-            id:
-              category.id,
-
-            name:
-              typeof category.name ===
-              "string"
-                ? category.name
-                : category.name?.es ??
-                  category.name?.en ??
-                  Object.values(
-                    category.name ??
-                      {}
-                  )[0] ??
-                  "",
-          })
-        )
+        json.data
       );
     } catch (
       error
@@ -236,17 +218,29 @@ export default function EditProductModal({
       );
 
       toast.error(
-        "No se pudieron cargar las categorías."
+        currentMessages()
+          .loadCategoriesError
       );
     }
   }
 
   async function updateProduct() {
-    if (
-      !product
-    ) {
+    const currentProduct =
+      product;
+
+    if (!currentProduct) {
       return;
     }
+
+    const currentLanguage =
+      useAdminLanguageStore
+        .getState()
+        .language;
+
+    const activeMessages =
+      ADMIN_PRODUCTS_MESSAGES[
+        currentLanguage
+      ];
 
     const normalizedName =
       name.trim();
@@ -261,7 +255,8 @@ export default function EditProductModal({
       !normalizedName
     ) {
       toast.error(
-        "Introduce un nombre."
+        activeMessages
+          .nameRequired
       );
 
       return;
@@ -271,7 +266,19 @@ export default function EditProductModal({
       !categoryId
     ) {
       toast.error(
-        "Selecciona una categoría."
+        activeMessages
+          .categoryRequired
+      );
+
+      return;
+    }
+
+    if (
+      !normalizedPrice
+    ) {
+      toast.error(
+        activeMessages
+          .priceRequired
       );
 
       return;
@@ -290,20 +297,49 @@ export default function EditProductModal({
         0
     ) {
       toast.error(
-        "Introduce un precio válido."
+        activeMessages
+          .priceInvalid
       );
 
       return;
     }
 
-    setSaving(
-      true
-    );
+    const nextName = {
+      ...currentProduct
+        .nameTranslations,
+
+      [currentLanguage]:
+        normalizedName,
+    };
+
+    const nextDescription = {
+      ...currentProduct
+        .descriptionTranslations,
+    };
+
+    if (
+      normalizedDescription
+    ) {
+      nextDescription[
+        currentLanguage
+      ] =
+        normalizedDescription;
+    }
+
+    if (
+      !normalizedDescription
+    ) {
+      delete nextDescription[
+        currentLanguage
+      ];
+    }
+
+    setSaving(true);
 
     try {
       const res =
         await adminFetch(
-          `/api/products/${product.id}`,
+          `/api/products/${currentProduct.id}`,
           {
             method:
               "PUT",
@@ -320,18 +356,11 @@ export default function EditProductModal({
                     categoryId
                   ),
 
-                name: {
-                  es:
-                    normalizedName,
-                },
+                name:
+                  nextName,
 
                 description:
-                  normalizedDescription
-                    ? {
-                        es:
-                          normalizedDescription,
-                      }
-                    : {},
+                  nextDescription,
 
                 price:
                   numericPrice.toFixed(
@@ -362,14 +391,16 @@ export default function EditProductModal({
         toast.error(
           json.error ||
             json.message ||
-            "No se pudo actualizar el producto."
+            activeMessages
+              .editError
         );
 
         return;
       }
 
       toast.success(
-        "Producto actualizado correctamente."
+        activeMessages
+          .editSuccess
       );
 
       await onUpdated();
@@ -384,12 +415,11 @@ export default function EditProductModal({
       );
 
       toast.error(
-        "Se produjo un error al actualizar el producto."
+        activeMessages
+          .editUnexpectedError
       );
     } finally {
-      setSaving(
-        false
-      );
+      setSaving(false);
     }
   }
 
@@ -400,19 +430,28 @@ export default function EditProductModal({
     return null;
   }
 
+  const priceLabel =
+    currency
+      ? `${messages.price} (${currency})`
+      : messages.price;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5">
       <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
         <div className="border-b p-6">
           <h2 className="text-xl font-bold">
-            Editar producto
+            {
+              messages.editTitle
+            }
           </h2>
         </div>
 
         <div className="space-y-5 p-6">
           <div>
             <label className="mb-2 block text-sm font-medium">
-              Nombre
+              {
+                messages.name
+              }
             </label>
 
             <input
@@ -435,7 +474,9 @@ export default function EditProductModal({
 
           <div>
             <label className="mb-2 block text-sm font-medium">
-              Categoría
+              {
+                messages.category
+              }
             </label>
 
             <select
@@ -468,9 +509,12 @@ export default function EditProductModal({
                       )
                     }
                   >
-                    {
-                      category.name
-                    }
+                    {getAdminProductText(
+                      category.name,
+                      language,
+                      messages
+                        .unnamedCategory
+                    )}
                   </option>
                 )
               )}
@@ -479,7 +523,9 @@ export default function EditProductModal({
 
           <div>
             <label className="mb-2 block text-sm font-medium">
-              Precio (€)
+              {
+                priceLabel
+              }
             </label>
 
             <input
@@ -505,7 +551,9 @@ export default function EditProductModal({
 
           <div>
             <label className="mb-2 block text-sm font-medium">
-              Descripción
+              {
+                messages.description
+              }
             </label>
 
             <textarea
@@ -548,7 +596,9 @@ export default function EditProductModal({
                 }
               />
 
-              Disponible
+              {
+                messages.activeAvailable
+              }
             </label>
 
             <label className="flex items-center gap-2">
@@ -569,7 +619,9 @@ export default function EditProductModal({
                 }
               />
 
-              Destacado
+              {
+                messages.activeFeatured
+              }
             </label>
 
             <label className="flex items-center gap-2">
@@ -590,7 +642,9 @@ export default function EditProductModal({
                 }
               />
 
-              Especial del día
+              {
+                messages.activeDailySpecial
+              }
             </label>
           </div>
         </div>
@@ -606,7 +660,9 @@ export default function EditProductModal({
             }
             className="rounded-xl border px-5 py-3 disabled:opacity-50"
           >
-            Cancelar
+            {
+              messages.cancel
+            }
           </button>
 
           <button
@@ -620,8 +676,8 @@ export default function EditProductModal({
             className="rounded-xl bg-indigo-600 px-5 py-3 text-white transition hover:bg-indigo-700 disabled:opacity-50"
           >
             {saving
-              ? "Guardando..."
-              : "Actualizar"}
+              ? messages.saving
+              : messages.update}
           </button>
         </div>
       </div>

@@ -12,6 +12,15 @@ export const LanguageCodeSchema =
     "pt",
   ]);
 
+export const ALL_LANGUAGE_CODES = [
+  "es",
+  "en",
+  "de",
+  "fr",
+  "it",
+  "pt",
+] as const;
+
 export const LanguageSettingsSchema =
   z
     .object({
@@ -19,23 +28,15 @@ export const LanguageSettingsSchema =
         LanguageCodeSchema,
 
       enabledLanguages:
-        z
-          .array(
-            LanguageCodeSchema
-          )
-          .min(
-            1,
-            "Debe haber al menos un idioma habilitado."
-          ),
+        z.array(
+          LanguageCodeSchema
+        ),
     })
     .superRefine(
       (
         data,
         ctx
       ) => {
-        /*
-         * No permitimos idiomas repetidos.
-         */
         const unique =
           new Set(
             data.enabledLanguages
@@ -58,12 +59,36 @@ export const LanguageSettingsSchema =
           });
         }
 
-        /*
-         * El idioma predeterminado debe estar
-         * necesariamente habilitado.
-         */
+        const allLanguagesEnabled =
+          ALL_LANGUAGE_CODES.every(
+            (
+              language
+            ) =>
+              unique.has(
+                language
+              )
+          ) &&
+          unique.size ===
+            ALL_LANGUAGE_CODES.length;
+
         if (
-          !data.enabledLanguages.includes(
+          !allLanguagesEnabled
+        ) {
+          ctx.addIssue({
+            code:
+              "custom",
+
+            path: [
+              "enabledLanguages",
+            ],
+
+            message:
+              "Los seis idiomas compatibles deben permanecer habilitados.",
+          });
+        }
+
+        if (
+          !unique.has(
             data.defaultLanguage
           )
         ) {

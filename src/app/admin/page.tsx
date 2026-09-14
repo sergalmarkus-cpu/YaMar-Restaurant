@@ -11,6 +11,7 @@ import {
   ChefHat,
   Euro,
   Loader2,
+  LockKeyhole,
   RefreshCw,
   ShoppingCart,
   TrendingUp,
@@ -18,8 +19,21 @@ import {
 } from "lucide-react";
 
 import {
+  ADMIN_DASHBOARD_MESSAGES,
+  type AdminDashboardLanguage,
+} from "@/config/admin-dashboard-i18n";
+
+import {
+  ADMIN_LANGUAGE_LOCALES,
+} from "@/config/admin-languages";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 import RecentOrders from "./dashboard/RecentOrders";
 import SalesChart from "./dashboard/SalesChart";
@@ -100,13 +114,21 @@ interface DashboardResponse {
   }>;
 }
 
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
 function formatMoney(
   value: number,
-  currency: string
+  currency: string,
+  locale: string
 ) {
   try {
     return new Intl.NumberFormat(
-      "es-ES",
+      locale,
       {
         style:
           "currency",
@@ -139,6 +161,24 @@ function trend(
 }
 
 export default function AdminDashboard() {
+  const language =
+    useAdminLanguageStore(
+      (
+        state
+      ) =>
+        state.language
+    ) as AdminDashboardLanguage;
+
+  const messages =
+    ADMIN_DASHBOARD_MESSAGES[
+      language
+    ];
+
+  const locale =
+    ADMIN_LANGUAGE_LOCALES[
+      language
+    ];
+
   const [
     dashboard,
     setDashboard,
@@ -161,6 +201,14 @@ export default function AdminDashboard() {
   const [
     refreshing,
     setRefreshing,
+  ] =
+    useState(
+      false
+    );
+
+  const [
+    accessDenied,
+    setAccessDenied,
   ] =
     useState(
       false
@@ -196,6 +244,10 @@ export default function AdminDashboard() {
           ""
         );
 
+        setAccessDenied(
+          false
+        );
+
         try {
           const response =
             await adminFetch(
@@ -203,33 +255,83 @@ export default function AdminDashboard() {
             );
 
           const json =
-            await response.json();
+            (await response.json()) as
+              ApiResponse<
+                DashboardResponse
+              >;
 
           if (
-            !response.ok ||
-            !json.success
+            response.status ===
+            403
           ) {
-            setError(
-              json.error ||
-                "No se pudo cargar el dashboard."
+            setDashboard(
+              null
+            );
+
+            setAccessDenied(
+              true
             );
 
             return;
           }
 
-          setDashboard(
-            json.data as DashboardResponse
-          );
-        } catch (
-          error
-        ) {
-          console.error(
-            "Error loading dashboard:",
-            error
+          if (
+            !response.ok ||
+            !json.success ||
+            !json.data
+          ) {
+            setDashboard(
+              null
+            );
+
+            setError(
+              json.error ||
+                json.message ||
+                ADMIN_DASHBOARD_MESSAGES[
+                  useAdminLanguageStore
+                    .getState()
+                    .language as
+                    AdminDashboardLanguage
+                ].unexpectedError
+            );
+
+            return;
+          }
+
+          setAccessDenied(
+            false
           );
 
           setError(
-            "No se pudo cargar el dashboard."
+            ""
+          );
+
+          setDashboard(
+            json.data
+          );
+        } catch (
+          loadError
+        ) {
+          console.error(
+            "Error loading dashboard:",
+            loadError
+          );
+
+          setDashboard(
+            null
+          );
+
+          setAccessDenied(
+            false
+          );
+
+          setError(
+            ADMIN_DASHBOARD_MESSAGES[
+              useAdminLanguageStore
+                .getState()
+                .language as
+                AdminDashboardLanguage
+            ].unexpectedError
           );
         } finally {
           setLoading(
@@ -258,22 +360,48 @@ export default function AdminDashboard() {
   ) {
     return (
       <div className="flex min-h-[420px] items-center justify-center">
-
         <div className="flex items-center gap-3 text-slate-600">
-
           <Loader2
             className="animate-spin"
-            size={
-              22
-            }
+            size={22}
           />
 
           <span>
-            Cargando dashboard...
+            {
+              messages.loading
+            }
           </span>
-
         </div>
+      </div>
+    );
+  }
 
+  if (
+    accessDenied
+  ) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center">
+        <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+            <LockKeyhole
+              size={28}
+            />
+          </div>
+
+          <h1 className="mt-5 text-xl font-semibold text-slate-900">
+            {
+              messages
+                .restrictedTitle
+            }
+          </h1>
+
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600">
+            {
+              messages
+                .restrictedDescription
+            }
+          </p>
+        </div>
       </div>
     );
   }
@@ -283,25 +411,25 @@ export default function AdminDashboard() {
   ) {
     return (
       <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-
         <div className="flex items-start gap-3">
-
           <AlertCircle
             className="mt-0.5 text-red-600"
-            size={
-              22
-            }
+            size={22}
           />
 
           <div>
             <h1 className="font-semibold text-red-900">
-              No se pudo cargar el dashboard
+              {
+                messages
+                  .loadErrorTitle
+              }
             </h1>
 
             <p className="mt-1 text-sm text-red-700">
               {
                 error ||
-                "Se produjo un error inesperado."
+                messages
+                  .unexpectedError
               }
             </p>
 
@@ -312,12 +440,12 @@ export default function AdminDashboard() {
               }
               className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700"
             >
-              Reintentar
+              {
+                messages.retry
+              }
             </button>
           </div>
-
         </div>
-
       </div>
     );
   }
@@ -329,22 +457,20 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-
         <div>
           <h1 className="text-3xl font-bold text-slate-900">
-            Dashboard
+            {
+              messages.page.title
+            }
           </h1>
 
           <p className="mt-1 text-slate-600">
-            Resumen general de
-            {" "}
-            <span className="font-medium text-slate-800">
-              {
+            {
+              messages.page.summary(
                 dashboard.establishment.name
-              }
-            </span>
+              )
+            }
           </p>
         </div>
 
@@ -361,9 +487,7 @@ export default function AdminDashboard() {
           className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <RefreshCw
-            size={
-              17
-            }
+            size={17}
             className={
               refreshing
                 ? "animate-spin"
@@ -372,10 +496,11 @@ export default function AdminDashboard() {
           />
 
           {refreshing
-            ? "Actualizando..."
-            : "Actualizar"}
+            ? messages.page
+                .refreshing
+            : messages.page
+                .refresh}
         </button>
-
       </div>
 
       {error && (
@@ -385,13 +510,16 @@ export default function AdminDashboard() {
       )}
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
-
         <StatsCard
-          title="Ventas hoy"
+          title={
+            messages.stats
+              .salesToday
+          }
           value={
             formatMoney(
               dashboard.metrics.sales.today,
-              currency
+              currency,
+              locale
             )
           }
           icon={
@@ -402,14 +530,26 @@ export default function AdminDashboard() {
               dashboard.metrics.sales.change
             )
           }
-          subtitle={`Ayer: ${formatMoney(
-            dashboard.metrics.sales.yesterday,
-            currency
-          )}`}
+          subtitle={
+            messages.stats.yesterday(
+              formatMoney(
+                dashboard.metrics.sales.yesterday,
+                currency,
+                locale
+              )
+            )
+          }
+          trendComparison={
+            messages.stats
+              .trendComparison
+          }
         />
 
         <StatsCard
-          title="Pedidos"
+          title={
+            messages.stats
+              .orders
+          }
           value={
             dashboard.metrics.orders.today
           }
@@ -421,11 +561,22 @@ export default function AdminDashboard() {
               dashboard.metrics.orders.change
             )
           }
-          subtitle={`Ayer: ${dashboard.metrics.orders.yesterday}`}
+          subtitle={
+            messages.stats.yesterday(
+              dashboard.metrics.orders.yesterday
+            )
+          }
+          trendComparison={
+            messages.stats
+              .trendComparison
+          }
         />
 
         <StatsCard
-          title="Clientes"
+          title={
+            messages.stats
+              .customers
+          }
           value={
             dashboard.metrics.customers.today
           }
@@ -437,15 +588,27 @@ export default function AdminDashboard() {
               dashboard.metrics.customers.change
             )
           }
-          subtitle={`Ayer: ${dashboard.metrics.customers.yesterday}`}
+          subtitle={
+            messages.stats.yesterday(
+              dashboard.metrics.customers.yesterday
+            )
+          }
+          trendComparison={
+            messages.stats
+              .trendComparison
+          }
         />
 
         <StatsCard
-          title="Ticket medio"
+          title={
+            messages.stats
+              .averageTicket
+          }
           value={
             formatMoney(
               dashboard.metrics.averageTicket.today,
-              currency
+              currency,
+              locale
             )
           }
           icon={
@@ -456,16 +619,23 @@ export default function AdminDashboard() {
               dashboard.metrics.averageTicket.change
             )
           }
-          subtitle={`Ayer: ${formatMoney(
-            dashboard.metrics.averageTicket.yesterday,
-            currency
-          )}`}
+          subtitle={
+            messages.stats.yesterday(
+              formatMoney(
+                dashboard.metrics.averageTicket.yesterday,
+                currency,
+                locale
+              )
+            )
+          }
+          trendComparison={
+            messages.stats
+              .trendComparison
+          }
         />
-
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-
         <SalesChart
           data={
             dashboard.weeklySales
@@ -476,41 +646,41 @@ export default function AdminDashboard() {
         />
 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
           <div className="mb-5 flex items-center gap-3">
-
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
               <ChefHat
-                size={
-                  22
-                }
+                size={22}
               />
             </div>
 
             <div>
               <h3 className="text-lg font-semibold text-slate-900">
-                Estado de cocina
+                {
+                  messages.kitchen
+                    .title
+                }
               </h3>
 
               <p className="text-sm text-slate-500">
-                Situación actual de los pedidos activos.
+                {
+                  messages.kitchen
+                    .description
+                }
               </p>
             </div>
-
           </div>
 
           <div className="space-y-4">
-
             <div className="flex items-center justify-between rounded-xl bg-emerald-50 p-4">
-
               <div className="flex items-center gap-3">
-
                 <div className="h-3 w-3 rounded-full bg-emerald-500" />
 
                 <span className="font-medium text-slate-900">
-                  Pedidos listos
+                  {
+                    messages.kitchen
+                      .ready
+                  }
                 </span>
-
               </div>
 
               <span className="text-2xl font-bold text-emerald-600">
@@ -518,19 +688,18 @@ export default function AdminDashboard() {
                   dashboard.kitchen.ready
                 }
               </span>
-
             </div>
 
             <div className="flex items-center justify-between rounded-xl bg-amber-50 p-4">
-
               <div className="flex items-center gap-3">
-
                 <div className="h-3 w-3 rounded-full bg-amber-500" />
 
                 <span className="font-medium text-slate-900">
-                  Preparando
+                  {
+                    messages.kitchen
+                      .preparing
+                  }
                 </span>
-
               </div>
 
               <span className="text-2xl font-bold text-amber-600">
@@ -538,19 +707,18 @@ export default function AdminDashboard() {
                   dashboard.kitchen.preparing
                 }
               </span>
-
             </div>
 
             <div className="flex items-center justify-between rounded-xl bg-red-50 p-4">
-
               <div className="flex items-center gap-3">
-
                 <div className="h-3 w-3 rounded-full bg-red-500" />
 
                 <span className="font-medium text-slate-900">
-                  Retrasados
+                  {
+                    messages.kitchen
+                      .delayed
+                  }
                 </span>
-
               </div>
 
               <span className="text-2xl font-bold text-red-600">
@@ -558,17 +726,12 @@ export default function AdminDashboard() {
                   dashboard.kitchen.delayed
                 }
               </span>
-
             </div>
-
           </div>
-
         </div>
-
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-
         <RecentOrders
           orders={
             dashboard.recentOrders
@@ -586,9 +749,7 @@ export default function AdminDashboard() {
             currency
           }
         />
-
       </div>
-
     </div>
   );
 }

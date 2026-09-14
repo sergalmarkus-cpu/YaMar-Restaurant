@@ -20,8 +20,20 @@ import {
 } from "lucide-react";
 
 import {
+  ADMIN_LANGUAGE_LOCALES,
+} from "@/config/admin-languages";
+
+import {
+  ADMIN_SALES_ANALYTICS_MESSAGES,
+} from "@/config/admin-sales-analytics-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 import SalesAnalyticsChart from "./SalesAnalyticsChart";
 
@@ -81,11 +93,21 @@ interface MetricCardProps {
 
 function formatMoney(
   value: number,
-  currency: string
+  currency: string,
+  locale: string
 ) {
+  if (!currency) {
+    return new Intl.NumberFormat(
+      locale,
+      {
+        maximumFractionDigits: 2,
+      }
+    ).format(value);
+  }
+
   try {
     return new Intl.NumberFormat(
-      "es-ES",
+      locale,
       {
         style: "currency",
         currency,
@@ -93,8 +115,39 @@ function formatMoney(
       }
     ).format(value);
   } catch {
-    return `${value.toFixed(2)} ${currency}`;
+    return `${new Intl.NumberFormat(
+      locale,
+      {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }
+    ).format(value)} ${currency}`;
   }
+}
+
+function formatDate(
+  value: string,
+  locale: string
+) {
+  const date =
+    new Date(
+      `${value}T00:00:00`
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    locale,
+    {
+      dateStyle: "medium",
+    }
+  ).format(date);
 }
 
 function MetricCard({
@@ -106,7 +159,6 @@ function MetricCard({
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
-
         <div className="min-w-0">
           <p className="text-sm font-medium text-slate-500">
             {title}
@@ -128,18 +180,35 @@ function MetricCard({
             size={21}
           />
         </div>
-
       </div>
     </div>
   );
 }
 
 export default function SalesAnalyticsView() {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_SALES_ANALYTICS_MESSAGES[
+      language
+    ];
+
+  const locale =
+    ADMIN_LANGUAGE_LOCALES[
+      language
+    ];
+
   const [
     period,
     setPeriod,
   ] =
-    useState<Period>(30);
+    useState<Period>(
+      30
+    );
 
   const [
     data,
@@ -204,8 +273,7 @@ export default function SalesAnalyticsView() {
             !json.success
           ) {
             setError(
-              json.error ||
-                "No se pudieron cargar las analíticas de ventas."
+              messages.loadError
             );
 
             return;
@@ -216,15 +284,15 @@ export default function SalesAnalyticsView() {
               SalesAnalyticsResponse
           );
         } catch (
-          error
+          loadError
         ) {
           console.error(
             "Error loading sales analytics:",
-            error
+            loadError
           );
 
           setError(
-            "No se pudieron cargar las analíticas de ventas."
+            messages.loadError
           );
         } finally {
           setLoading(
@@ -236,7 +304,9 @@ export default function SalesAnalyticsView() {
           );
         }
       },
-      []
+      [
+        messages.loadError,
+      ]
     );
 
   useEffect(
@@ -253,8 +323,10 @@ export default function SalesAnalyticsView() {
 
   const currency =
     data?.establishment
-      .currency ??
-    "EUR";
+      .currency
+      ?.trim()
+      .toUpperCase() ??
+    "";
 
   const periodLabel =
     useMemo(
@@ -263,19 +335,23 @@ export default function SalesAnalyticsView() {
           period ===
           7
         ) {
-          return "Últimos 7 días";
+          return messages.period
+            .last7;
         }
 
         if (
           period ===
           90
         ) {
-          return "Últimos 90 días";
+          return messages.period
+            .last90;
         }
 
-        return "Últimos 30 días";
+        return messages.period
+          .last30;
       },
       [
+        messages.period,
         period,
       ]
     );
@@ -293,7 +369,9 @@ export default function SalesAnalyticsView() {
           />
 
           <span>
-            Cargando analíticas...
+            {
+              messages.loading
+            }
           </span>
         </div>
       </div>
@@ -302,22 +380,31 @@ export default function SalesAnalyticsView() {
 
   return (
     <div className="space-y-6">
-
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-
         <div>
           <h1 className="text-3xl font-bold text-slate-900">
-            Analíticas de ventas
+            {
+              messages.page
+                .title
+            }
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Consulta la evolución de ventas, pedidos y clientes del establecimiento.
+            {
+              messages.page
+                .subtitle
+            }
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-
-          {[7, 30, 90].map(
+          {(
+            [
+              7,
+              30,
+              90,
+            ] as Period[]
+          ).map(
             (
               value
             ) => {
@@ -333,7 +420,7 @@ export default function SalesAnalyticsView() {
                   type="button"
                   onClick={() =>
                     setPeriod(
-                      value as Period
+                      value
                     )
                   }
                   className={`rounded-xl px-4 py-2 text-sm font-medium transition ${
@@ -342,7 +429,11 @@ export default function SalesAnalyticsView() {
                       : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                   }`}
                 >
-                  {value} días
+                  {
+                    messages.page.days(
+                      value
+                    )
+                  }
                 </button>
               );
             }
@@ -370,11 +461,13 @@ export default function SalesAnalyticsView() {
               }
             />
 
-            Actualizar
+            {refreshing
+              ? messages.page
+                  .refreshing
+              : messages.page
+                  .refresh}
           </button>
-
         </div>
-
       </div>
 
       {error && (
@@ -385,11 +478,8 @@ export default function SalesAnalyticsView() {
 
       {data && (
         <>
-
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
-
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
               <div className="flex items-center gap-3">
                 <CalendarDays
                   size={20}
@@ -398,112 +488,165 @@ export default function SalesAnalyticsView() {
 
                 <div>
                   <p className="font-medium text-slate-900">
-                    {periodLabel}
+                    {
+                      periodLabel
+                    }
                   </p>
 
                   <p className="text-sm text-slate-500">
-                    {data.period.from}
-                    {" "}
-                    →
-                    {" "}
-                    {data.period.to}
+                    {formatDate(
+                      data.period.from,
+                      locale
+                    )}
+                    {" → "}
+                    {formatDate(
+                      data.period.to,
+                      locale
+                    )}
                   </p>
                 </div>
               </div>
 
               <div className="text-sm text-slate-500">
-                Zona horaria:
-                {" "}
+                {
+                  messages.period
+                    .timezone
+                }
+                :{" "}
+
                 <span className="font-medium text-slate-700">
-                  {data.establishment.timezone}
+                  {
+                    data.establishment
+                      .timezone
+                  }
                 </span>
               </div>
-
             </div>
-
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-
             <MetricCard
-              title="Ventas totales"
+              title={
+                messages.metrics
+                  .totalSales
+              }
               value={
                 formatMoney(
-                  data.summary.totalSales,
-                  currency
+                  data.summary
+                    .totalSales,
+                  currency,
+                  locale
                 )
               }
-              subtitle="Pagos efectivamente cobrados"
+              subtitle={
+                messages.metrics
+                  .totalSalesSubtitle
+              }
               icon={
                 TrendingUp
               }
             />
 
             <MetricCard
-              title="Pagos completados"
-              value={
-                data.summary.totalPayments
+              title={
+                messages.metrics
+                  .completedPayments
               }
-              subtitle="Transacciones con estado paid"
+              value={
+                data.summary
+                  .totalPayments
+              }
+              subtitle={
+                messages.metrics
+                  .completedPaymentsSubtitle
+              }
               icon={
                 CreditCard
               }
             />
 
             <MetricCard
-              title="Pedidos"
-              value={
-                data.summary.totalOrders
+              title={
+                messages.metrics
+                  .orders
               }
-              subtitle="Pedidos no cancelados"
+              value={
+                data.summary
+                  .totalOrders
+              }
+              subtitle={
+                messages.metrics
+                  .ordersSubtitle
+              }
               icon={
                 ShoppingCart
               }
             />
 
             <MetricCard
-              title="Clientes pagadores"
-              value={
-                data.summary.payingCustomers
+              title={
+                messages.metrics
+                  .payingCustomers
               }
-              subtitle="Sesiones con al menos un pago"
+              value={
+                data.summary
+                  .payingCustomers
+              }
+              subtitle={
+                messages.metrics
+                  .payingCustomersSubtitle
+              }
               icon={
                 Users
               }
             />
 
             <MetricCard
-              title="Ticket medio"
+              title={
+                messages.metrics
+                  .averageTicket
+              }
               value={
                 formatMoney(
-                  data.summary.averageTicket,
-                  currency
+                  data.summary
+                    .averageTicket,
+                  currency,
+                  locale
                 )
               }
-              subtitle="Ventas por cliente pagador"
+              subtitle={
+                messages.metrics
+                  .averageTicketSubtitle
+              }
               icon={
                 ReceiptText
               }
             />
 
             <MetricCard
-              title="Media diaria"
+              title={
+                messages.metrics
+                  .dailyAverage
+              }
               value={
                 formatMoney(
-                  data.summary.averageDailySales,
-                  currency
+                  data.summary
+                    .averageDailySales,
+                  currency,
+                  locale
                 )
               }
-              subtitle="Ventas medias por día del período"
+              subtitle={
+                messages.metrics
+                  .dailyAverageSubtitle
+              }
               icon={
                 WalletCards
               }
             />
-
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-
             <div className="xl:col-span-2">
               <SalesAnalyticsChart
                 data={
@@ -512,102 +655,130 @@ export default function SalesAnalyticsView() {
                 currency={
                   currency
                 }
+                locale={
+                  locale
+                }
+                title={
+                  messages.chart
+                    .title
+                }
+                subtitle={
+                  messages.chart
+                    .subtitle
+                }
+                salesLabel={
+                  messages.chart
+                    .sales
+                }
               />
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
               <h2 className="text-lg font-semibold text-slate-900">
-                Mejor día
+                {
+                  messages.bestDay
+                    .title
+                }
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Día con mayor facturación dentro del período.
+                {
+                  messages.bestDay
+                    .subtitle
+                }
               </p>
 
               {data.summary.bestDay ? (
                 <div className="mt-6">
-
                   <div className="rounded-2xl bg-indigo-50 p-5">
-
                     <p className="text-sm font-medium text-indigo-700">
-                      {
-                        data.summary.bestDay.label
-                      }
+                      {formatDate(
+                        data.summary
+                          .bestDay.date,
+                        locale
+                      )}
                     </p>
 
                     <p className="mt-2 text-3xl font-bold text-indigo-900">
-                      {
-                        formatMoney(
-                          data.summary.bestDay.sales,
-                          currency
-                        )
-                      }
+                      {formatMoney(
+                        data.summary
+                          .bestDay.sales,
+                        currency,
+                        locale
+                      )}
                     </p>
-
-                    <p className="mt-2 text-xs text-indigo-700">
-                      {
-                        data.summary.bestDay.date
-                      }
-                    </p>
-
                   </div>
-
                 </div>
               ) : (
                 <div className="mt-6 rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                  Todavía no existen ventas en este período.
+                  {
+                    messages.bestDay
+                      .empty
+                  }
                 </div>
               )}
-
             </div>
-
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-
             <div className="border-b border-slate-200 px-6 py-5">
               <h2 className="font-semibold text-slate-900">
-                Detalle diario
+                {
+                  messages.daily
+                    .title
+                }
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                Desglose completo del período seleccionado.
+                {
+                  messages.daily
+                    .subtitle
+                }
               </p>
             </div>
 
             <div className="overflow-x-auto">
-
               <table className="min-w-full divide-y divide-slate-200">
-
                 <thead className="bg-slate-50">
                   <tr>
-
                     <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Fecha
+                      {
+                        messages.daily
+                          .date
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Ventas
+                      {
+                        messages.daily
+                          .sales
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Pagos
+                      {
+                        messages.daily
+                          .payments
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Pedidos
+                      {
+                        messages.daily
+                          .orders
+                      }
                     </th>
 
                     <th className="px-6 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      Clientes
+                      {
+                        messages.daily
+                          .customers
+                      }
                     </th>
-
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-
                   {data.daily.map(
                     (
                       day
@@ -618,20 +789,19 @@ export default function SalesAnalyticsView() {
                         }
                         className="transition hover:bg-slate-50"
                       >
-
                         <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
-                          {
-                            day.label
-                          }
+                          {formatDate(
+                            day.date,
+                            locale
+                          )}
                         </td>
 
                         <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-slate-700">
-                          {
-                            formatMoney(
-                              day.sales,
-                              currency
-                            )
-                          }
+                          {formatMoney(
+                            day.sales,
+                            currency,
+                            locale
+                          )}
                         </td>
 
                         <td className="whitespace-nowrap px-6 py-4 text-right text-sm text-slate-700">
@@ -651,22 +821,15 @@ export default function SalesAnalyticsView() {
                             day.customers
                           }
                         </td>
-
                       </tr>
                     )
                   )}
-
                 </tbody>
-
               </table>
-
             </div>
-
           </div>
-
         </>
       )}
-
     </div>
   );
 }

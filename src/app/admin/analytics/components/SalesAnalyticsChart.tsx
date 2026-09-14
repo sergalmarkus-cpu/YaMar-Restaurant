@@ -22,15 +22,29 @@ interface SalesAnalyticsDay {
 interface Props {
   data: SalesAnalyticsDay[];
   currency: string;
+  locale: string;
+  title: string;
+  subtitle: string;
+  salesLabel: string;
 }
 
 function formatMoney(
   value: number,
-  currency: string
+  currency: string,
+  locale: string
 ) {
+  if (!currency) {
+    return new Intl.NumberFormat(
+      locale,
+      {
+        maximumFractionDigits: 2,
+      }
+    ).format(value);
+  }
+
   try {
     return new Intl.NumberFormat(
-      "es-ES",
+      locale,
       {
         style: "currency",
         currency,
@@ -38,23 +52,71 @@ function formatMoney(
       }
     ).format(value);
   } catch {
-    return `${value.toFixed(2)} ${currency}`;
+    return `${new Intl.NumberFormat(
+      locale,
+      {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }
+    ).format(value)} ${currency}`;
   }
+}
+
+function formatDayLabel(
+  value: string,
+  locale: string
+) {
+  const date =
+    new Date(
+      `${value}T00:00:00`
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    locale,
+    {
+      day: "2-digit",
+      month: "short",
+    }
+  ).format(date);
 }
 
 export default function SalesAnalyticsChart({
   data,
   currency,
+  locale,
+  title,
+  subtitle,
+  salesLabel,
 }: Props) {
+  const localizedData =
+    data.map(
+      (day) => ({
+        ...day,
+        localizedLabel:
+          formatDayLabel(
+            day.date,
+            locale
+          ),
+      })
+    );
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-5">
         <h2 className="text-lg font-semibold text-slate-900">
-          Evolución de ventas
+          {title}
         </h2>
 
         <p className="mt-1 text-sm text-slate-500">
-          Importe cobrado por día durante el período seleccionado.
+          {subtitle}
         </p>
       </div>
 
@@ -64,7 +126,9 @@ export default function SalesAnalyticsChart({
           height="100%"
         >
           <LineChart
-            data={data}
+            data={
+              localizedData
+            }
           >
             <CartesianGrid
               strokeDasharray="3 3"
@@ -72,7 +136,7 @@ export default function SalesAnalyticsChart({
             />
 
             <XAxis
-              dataKey="label"
+              dataKey="localizedLabel"
               stroke="#64748b"
               fontSize={12}
               minTickGap={20}
@@ -81,26 +145,38 @@ export default function SalesAnalyticsChart({
             <YAxis
               stroke="#64748b"
               fontSize={12}
-              tickFormatter={(value) =>
+              tickFormatter={(
+                value
+              ) =>
                 formatMoney(
                   Number(value),
-                  currency
+                  currency,
+                  locale
                 )
               }
             />
 
             <Tooltip
               contentStyle={{
-                backgroundColor: "#ffffff",
-                border: "1px solid #e2e8f0",
-                borderRadius: "12px",
+                backgroundColor:
+                  "#ffffff",
+                border:
+                  "1px solid #e2e8f0",
+                borderRadius:
+                  "12px",
               }}
-              formatter={(value) => [
+              formatter={(
+                value
+              ) => [
                 formatMoney(
-                  Number(value ?? 0),
-                  currency
+                  Number(
+                    value ??
+                      0
+                  ),
+                  currency,
+                  locale
                 ),
-                "Ventas",
+                salesLabel,
               ]}
             />
 
@@ -110,7 +186,8 @@ export default function SalesAnalyticsChart({
               stroke="#4f46e5"
               strokeWidth={3}
               dot={{
-                fill: "#4f46e5",
+                fill:
+                  "#4f46e5",
                 r: 3,
               }}
               activeDot={{

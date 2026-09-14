@@ -1,9 +1,12 @@
 "use client";
 
 import {
-  FormEvent,
   useEffect,
   useState,
+} from "react";
+
+import type {
+  FormEvent,
 } from "react";
 
 import {
@@ -16,8 +19,16 @@ import {
 } from "lucide-react";
 
 import {
+  ADMIN_AREAS_MESSAGES,
+} from "@/config/admin-areas-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Area {
   id: number;
@@ -47,35 +58,56 @@ const EMPTY_FORM: CreateAreaForm = {
 };
 
 export default function AreasList() {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_AREAS_MESSAGES[
+      language
+    ];
+
   const [
     areas,
     setAreas,
   ] =
-    useState<Area[]>([]);
+    useState<Area[]>(
+      []
+    );
 
   const [
     loading,
     setLoading,
   ] =
-    useState(true);
+    useState(
+      true
+    );
 
   const [
     error,
     setError,
   ] =
-    useState("");
+    useState(
+      ""
+    );
 
   const [
     showCreateForm,
     setShowCreateForm,
   ] =
-    useState(false);
+    useState(
+      false
+    );
 
   const [
     creating,
     setCreating,
   ] =
-    useState(false);
+    useState(
+      false
+    );
 
   const [
     form,
@@ -85,29 +117,42 @@ export default function AreasList() {
       EMPTY_FORM
     );
 
-  useEffect(() => {
-    void loadAreas();
-  }, []);
+  useEffect(
+    () => {
+      void loadAreas();
+    },
+    []
+  );
+
+  function currentMessages() {
+    return ADMIN_AREAS_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
 
   async function loadAreas() {
-    setError("");
+    setError(
+      ""
+    );
 
     try {
-      const res =
+      const response =
         await adminFetch(
           "/api/areas"
         );
 
       const json =
-        await res.json();
+        await response.json();
 
       if (
-        !res.ok ||
+        !response.ok ||
         !json.success
       ) {
         setError(
-          json.error ||
-            "No se pudieron cargar las áreas."
+          currentMessages()
+            .loadError
         );
 
         return;
@@ -116,14 +161,17 @@ export default function AreasList() {
       setAreas(
         json.data
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error loading areas:",
         error
       );
 
       setError(
-        "No se pudieron cargar las áreas."
+        currentMessages()
+          .loadError
       );
     } finally {
       setLoading(
@@ -137,9 +185,7 @@ export default function AreasList() {
     value: string
   ) {
     setForm(
-      (
-        current
-      ) => ({
+      (current) => ({
         ...current,
         [field]:
           value,
@@ -155,6 +201,10 @@ export default function AreasList() {
     setShowCreateForm(
       false
     );
+
+    setError(
+      ""
+    );
   }
 
   async function createArea(
@@ -162,7 +212,12 @@ export default function AreasList() {
   ) {
     event.preventDefault();
 
-    setError("");
+    setError(
+      ""
+    );
+
+    const activeMessages =
+      currentMessages();
 
     const name =
       form.name.trim();
@@ -171,7 +226,7 @@ export default function AreasList() {
       !name
     ) {
       setError(
-        "El nombre del área es obligatorio."
+        activeMessages.nameRequired
       );
 
       return;
@@ -197,7 +252,7 @@ export default function AreasList() {
         radius > 10000
       ) {
         setError(
-          "El radio debe ser un número entero entre 1 y 10000 metros."
+          activeMessages.invalidRadius
         );
 
         return;
@@ -222,7 +277,7 @@ export default function AreasList() {
         )
       ) {
         setError(
-          "La latitud no es válida."
+          activeMessages.invalidLatitude
         );
 
         return;
@@ -247,7 +302,7 @@ export default function AreasList() {
         )
       ) {
         setError(
-          "La longitud no es válida."
+          activeMessages.invalidLongitude
         );
 
         return;
@@ -306,7 +361,7 @@ export default function AreasList() {
     );
 
     try {
-      const res =
+      const response =
         await adminFetch(
           "/api/areas",
           {
@@ -326,15 +381,14 @@ export default function AreasList() {
         );
 
       const json =
-        await res.json();
+        await response.json();
 
       if (
-        !res.ok ||
+        !response.ok ||
         !json.success
       ) {
         setError(
-          json.error ||
-            "No se pudo crear el área."
+          activeMessages.createError
         );
 
         return;
@@ -343,14 +397,16 @@ export default function AreasList() {
       resetCreateForm();
 
       await loadAreas();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error creating area:",
         error
       );
 
       setError(
-        "No se pudo crear el área."
+        activeMessages.createError
       );
     } finally {
       setCreating(
@@ -363,10 +419,15 @@ export default function AreasList() {
     id: number,
     current: boolean
   ) {
-    setError("");
+    setError(
+      ""
+    );
+
+    const activeMessages =
+      currentMessages();
 
     try {
-      const res =
+      const response =
         await adminFetch(
           `/api/areas/${id}`,
           {
@@ -387,29 +448,30 @@ export default function AreasList() {
         );
 
       const json =
-        await res.json();
+        await response.json();
 
       if (
-        !res.ok ||
+        !response.ok ||
         !json.success
       ) {
         setError(
-          json.error ||
-            "No se pudo actualizar el área."
+          activeMessages.updateError
         );
 
         return;
       }
 
       await loadAreas();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error updating area:",
         error
       );
 
       setError(
-        "No se pudo actualizar el área."
+        activeMessages.updateError
       );
     }
   }
@@ -417,18 +479,23 @@ export default function AreasList() {
   async function deleteArea(
     id: number
   ) {
+    const activeMessages =
+      currentMessages();
+
     if (
       !window.confirm(
-        "¿Eliminar esta área definitivamente?"
+        activeMessages.deleteConfirm
       )
     ) {
       return;
     }
 
-    setError("");
+    setError(
+      ""
+    );
 
     try {
-      const res =
+      const response =
         await adminFetch(
           `/api/areas/${id}`,
           {
@@ -438,29 +505,39 @@ export default function AreasList() {
         );
 
       const json =
-        await res.json();
+        await response.json();
 
       if (
-        !res.ok ||
+        !response.ok ||
         !json.success
       ) {
-        setError(
-          json.error ||
-            "No se pudo eliminar el área."
-        );
+        if (
+          response.status ===
+          409
+        ) {
+          setError(
+            activeMessages.areaHasTables
+          );
+        } else {
+          setError(
+            activeMessages.deleteError
+          );
+        }
 
         return;
       }
 
       await loadAreas();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error deleting area:",
         error
       );
 
       setError(
-        "No se pudo eliminar el área."
+        activeMessages.deleteError
       );
     }
   }
@@ -470,7 +547,9 @@ export default function AreasList() {
   ) {
     return (
       <div className="p-6">
-        Cargando áreas...
+        {
+          messages.loading
+        }
       </div>
     );
   }
@@ -480,11 +559,15 @@ export default function AreasList() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold">
-            Áreas
+            {
+              messages.title
+            }
           </h2>
 
           <p className="text-gray-500">
-            Gestión de zonas del establecimiento
+            {
+              messages.subtitle
+            }
           </p>
         </div>
 
@@ -499,19 +582,21 @@ export default function AreasList() {
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700"
           >
             <Plus
-              size={
-                18
-              }
+              size={18}
             />
 
-            Añadir área
+            {
+              messages.addArea
+            }
           </button>
         )}
       </div>
 
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+          {
+            error
+          }
         </div>
       )}
 
@@ -525,11 +610,15 @@ export default function AreasList() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold">
-                Nueva área
+                {
+                  messages.newArea
+                }
               </h3>
 
               <p className="text-sm text-gray-500">
-                Crea una zona para organizar las mesas del establecimiento.
+                {
+                  messages.newAreaDescription
+                }
               </p>
             </div>
 
@@ -541,13 +630,16 @@ export default function AreasList() {
               disabled={
                 creating
               }
-              aria-label="Cerrar formulario"
+              aria-label={
+                messages.closeForm
+              }
+              title={
+                messages.closeForm
+              }
               className="rounded-lg p-2 text-gray-500 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <X
-                size={
-                  20
-                }
+                size={20}
               />
             </button>
           </div>
@@ -558,7 +650,10 @@ export default function AreasList() {
                 htmlFor="area-name"
                 className="mb-1 block text-sm font-medium text-gray-700"
               >
-                Nombre *
+                {
+                  messages.name
+                }{" "}
+                *
               </label>
 
               <input
@@ -572,9 +667,7 @@ export default function AreasList() {
                 ) =>
                   updateForm(
                     "name",
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 }
                 maxLength={
@@ -584,7 +677,9 @@ export default function AreasList() {
                 disabled={
                   creating
                 }
-                placeholder="Ej. Sala principal"
+                placeholder={
+                  messages.namePlaceholder
+                }
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
               />
             </div>
@@ -594,7 +689,9 @@ export default function AreasList() {
                 htmlFor="area-description"
                 className="mb-1 block text-sm font-medium text-gray-700"
               >
-                Descripción
+                {
+                  messages.description
+                }
               </label>
 
               <textarea
@@ -607,9 +704,7 @@ export default function AreasList() {
                 ) =>
                   updateForm(
                     "description",
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 }
                 maxLength={
@@ -621,7 +716,9 @@ export default function AreasList() {
                 rows={
                   3
                 }
-                placeholder="Ej. Zona interior del restaurante"
+                placeholder={
+                  messages.descriptionPlaceholder
+                }
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
               />
             </div>
@@ -631,7 +728,9 @@ export default function AreasList() {
                 htmlFor="area-latitude"
                 className="mb-1 block text-sm font-medium text-gray-700"
               >
-                Latitud
+                {
+                  messages.latitude
+                }
               </label>
 
               <input
@@ -646,15 +745,15 @@ export default function AreasList() {
                 ) =>
                   updateForm(
                     "latitude",
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 }
                 disabled={
                   creating
                 }
-                placeholder="Ej. 36.5297"
+                placeholder={
+                  messages.latitudePlaceholder
+                }
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
               />
             </div>
@@ -664,7 +763,9 @@ export default function AreasList() {
                 htmlFor="area-longitude"
                 className="mb-1 block text-sm font-medium text-gray-700"
               >
-                Longitud
+                {
+                  messages.longitude
+                }
               </label>
 
               <input
@@ -679,15 +780,15 @@ export default function AreasList() {
                 ) =>
                   updateForm(
                     "longitude",
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 }
                 disabled={
                   creating
                 }
-                placeholder="Ej. -6.2924"
+                placeholder={
+                  messages.longitudePlaceholder
+                }
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
               />
             </div>
@@ -697,21 +798,17 @@ export default function AreasList() {
                 htmlFor="area-radius"
                 className="mb-1 block text-sm font-medium text-gray-700"
               >
-                Radio de geolocalización (m)
+                {
+                  messages.radius
+                }
               </label>
 
               <input
                 id="area-radius"
                 type="number"
-                min={
-                  1
-                }
-                max={
-                  10000
-                }
-                step={
-                  1
-                }
+                min={1}
+                max={10000}
+                step={1}
                 value={
                   form.radius
                 }
@@ -720,20 +817,22 @@ export default function AreasList() {
                 ) =>
                   updateForm(
                     "radius",
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 }
                 disabled={
                   creating
                 }
-                placeholder="Ej. 50"
+                placeholder={
+                  messages.radiusPlaceholder
+                }
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-gray-100"
               />
 
               <p className="mt-1 text-xs text-gray-500">
-                Opcional. Entre 1 y 10000 metros.
+                {
+                  messages.radiusHint
+                }
               </p>
             </div>
           </div>
@@ -749,7 +848,9 @@ export default function AreasList() {
               }
               className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Cancelar
+              {
+                messages.cancel
+              }
             </button>
 
             <button
@@ -760,8 +861,8 @@ export default function AreasList() {
               className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {creating
-                ? "Creando..."
-                : "Crear área"}
+                ? messages.creating
+                : messages.createArea}
             </button>
           </div>
         </form>
@@ -769,9 +870,7 @@ export default function AreasList() {
 
       <div className="grid gap-4">
         {areas.map(
-          (
-            area
-          ) => (
+          (area) => (
             <div
               key={
                 area.id
@@ -781,9 +880,7 @@ export default function AreasList() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <Map
-                    size={
-                      24
-                    }
+                    size={24}
                   />
 
                   <div>
@@ -795,7 +892,7 @@ export default function AreasList() {
 
                     <p className="text-sm text-gray-500">
                       {area.description ||
-                        "Sin descripción"}
+                        messages.noDescription}
                     </p>
                   </div>
                 </div>
@@ -811,22 +908,23 @@ export default function AreasList() {
                     }
                     aria-label={
                       area.active
-                        ? "Desactivar área"
-                        : "Activar área"
+                        ? messages.deactivateArea
+                        : messages.activateArea
+                    }
+                    title={
+                      area.active
+                        ? messages.deactivateArea
+                        : messages.activateArea
                     }
                   >
                     {area.active ? (
                       <ToggleRight
-                        size={
-                          28
-                        }
+                        size={28}
                         className="text-green-600"
                       />
                     ) : (
                       <ToggleLeft
-                        size={
-                          28
-                        }
+                        size={28}
                         className="text-gray-400"
                       />
                     )}
@@ -839,12 +937,15 @@ export default function AreasList() {
                         area.id
                       )
                     }
-                    aria-label="Eliminar área"
+                    aria-label={
+                      messages.deleteArea
+                    }
+                    title={
+                      messages.deleteArea
+                    }
                   >
                     <Trash2
-                      size={
-                        20
-                      }
+                      size={20}
                       className="text-red-500"
                     />
                   </button>
@@ -858,7 +959,9 @@ export default function AreasList() {
       {areas.length ===
         0 && (
         <div className="rounded-xl border bg-white p-6 text-gray-500">
-          No hay áreas configuradas.
+          {
+            messages.noAreas
+          }
         </div>
       )}
     </div>

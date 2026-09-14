@@ -1,4 +1,19 @@
+"use client";
+
 import Link from "next/link";
+
+import {
+  ADMIN_DASHBOARD_MESSAGES,
+  type AdminDashboardLanguage,
+} from "@/config/admin-dashboard-i18n";
+
+import {
+  ADMIN_LANGUAGE_LOCALES,
+} from "@/config/admin-languages";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface TranslatedText {
   es?: string;
@@ -22,7 +37,9 @@ interface Props {
 }
 
 function getProductName(
-  value: unknown
+  value: unknown,
+  language: AdminDashboardLanguage,
+  fallback: string
 ) {
   if (
     typeof value ===
@@ -41,26 +58,30 @@ function getProductName(
         TranslatedText;
 
     return (
+      translated[
+        language
+      ] ||
       translated.es ||
       translated.en ||
       translated.fr ||
       translated.de ||
       translated.it ||
       translated.pt ||
-      "Producto"
+      fallback
     );
   }
 
-  return "Producto";
+  return fallback;
 }
 
 function formatMoney(
   value: number,
-  currency: string
+  currency: string,
+  locale: string
 ) {
   try {
     return new Intl.NumberFormat(
-      "es-ES",
+      locale,
       {
         style:
           "currency",
@@ -81,18 +102,38 @@ export default function TopProducts({
   products,
   currency,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (
+        state
+      ) =>
+        state.language
+    ) as AdminDashboardLanguage;
+
+  const messages =
+    ADMIN_DASHBOARD_MESSAGES[
+      language
+    ].topProducts;
+
+  const locale =
+    ADMIN_LANGUAGE_LOCALES[
+      language
+    ];
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
       <div className="mb-5 flex items-center justify-between">
-
         <div>
           <h3 className="text-lg font-semibold text-slate-900">
-            Productos más vendidos
+            {
+              messages.title
+            }
           </h3>
 
           <p className="mt-1 text-sm text-slate-500">
-            Ranking de los últimos 7 días.
+            {
+              messages.description
+            }
           </p>
         </div>
 
@@ -100,19 +141,22 @@ export default function TopProducts({
           href="/admin/products"
           className="text-sm font-medium text-indigo-600 transition hover:text-indigo-700"
         >
-          Ver productos
+          {
+            messages
+              .viewProducts
+          }
         </Link>
-
       </div>
 
       {products.length ===
       0 ? (
         <div className="rounded-xl bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-          Todavía no hay ventas suficientes para generar el ranking.
+          {
+            messages.empty
+          }
         </div>
       ) : (
         <div className="space-y-3">
-
           {products.map(
             (
               product,
@@ -124,9 +168,7 @@ export default function TopProducts({
                 }
                 className="flex items-center justify-between rounded-xl p-3 transition hover:bg-slate-50"
               >
-
                 <div className="flex min-w-0 items-center gap-3">
-
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-600">
                     {
                       index +
@@ -135,11 +177,13 @@ export default function TopProducts({
                   </div>
 
                   <div className="min-w-0">
-
                     <p className="truncate font-medium text-slate-900">
                       {
                         getProductName(
-                          product.name
+                          product.name,
+                          language,
+                          messages
+                            .fallbackProduct
                         )
                       }
                     </p>
@@ -152,35 +196,31 @@ export default function TopProducts({
                       {
                         product.quantity ===
                         1
-                          ? "unidad vendida"
-                          : "unidades vendidas"
+                          ? messages
+                              .oneUnit
+                          : messages
+                              .manyUnits
                       }
                     </p>
-
                   </div>
-
                 </div>
 
                 <div className="ml-4 shrink-0 text-right">
-
                   <p className="font-semibold text-slate-900">
                     {
                       formatMoney(
                         product.revenue,
-                        currency
+                        currency,
+                        locale
                       )
                     }
                   </p>
-
                 </div>
-
               </div>
             )
           )}
-
         </div>
       )}
-
     </div>
   );
 }

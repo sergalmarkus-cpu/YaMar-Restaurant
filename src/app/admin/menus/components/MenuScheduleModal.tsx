@@ -23,8 +23,17 @@ import {
 } from "sonner";
 
 import {
+  ADMIN_MENUS_MESSAGES,
+  getAdminMenuDays,
+} from "@/config/admin-menus-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Menu {
   id: number;
@@ -46,33 +55,6 @@ interface Props {
   onClose: () => void;
 }
 
-const DAYS = [
-  "Domingo",
-  "Lunes",
-  "Martes",
-  "Miércoles",
-  "Jueves",
-  "Viernes",
-  "Sábado",
-];
-
-function getMenuName(
-  name: any
-) {
-  if (
-    typeof name ===
-    "string"
-  ) {
-    return name;
-  }
-
-  return (
-    name?.es ||
-    name?.en ||
-    "Sin nombre"
-  );
-}
-
 function invalidTimeRange(
   openTime: string,
   closeTime: string
@@ -90,6 +72,28 @@ export default function MenuScheduleModal({
   menu,
   onClose,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_MENUS_MESSAGES[
+      language
+    ];
+
+  const days =
+    useMemo(
+      () =>
+        getAdminMenuDays(
+          messages
+        ),
+      [
+        messages,
+      ]
+    );
+
   const [
     schedules,
     setSchedules,
@@ -196,6 +200,34 @@ export default function MenuScheduleModal({
   ] =
     useState(false);
 
+  function currentMessages() {
+    return ADMIN_MENUS_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
+
+  function getMenuName(
+    name: any
+  ) {
+    if (
+      typeof name ===
+      "string"
+    ) {
+      return name;
+    }
+
+    return (
+      name?.[
+        language
+      ] ||
+      name?.es ||
+      name?.en ||
+      messages.unnamed
+    );
+  }
+
   useEffect(() => {
     if (
       !open ||
@@ -219,7 +251,7 @@ export default function MenuScheduleModal({
   const schedulesByDay =
     useMemo(
       () =>
-        DAYS.map(
+        days.map(
           (
             _,
             index
@@ -234,6 +266,7 @@ export default function MenuScheduleModal({
         ),
       [
         schedules,
+        days,
       ]
     );
 
@@ -268,7 +301,10 @@ export default function MenuScheduleModal({
   }
 
   async function loadSchedules() {
-    if (!menu) {
+    const currentMenu =
+      menu;
+
+    if (!currentMenu) {
       return;
     }
 
@@ -279,7 +315,7 @@ export default function MenuScheduleModal({
     try {
       const response =
         await adminFetch(
-          `/api/menu-schedules?menuId=${menu.id}`
+          `/api/menu-schedules?menuId=${currentMenu.id}`
         );
 
       const json =
@@ -290,9 +326,8 @@ export default function MenuScheduleModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudieron cargar los horarios."
+          currentMessages()
+            .schedulesLoadError
         );
 
         return;
@@ -301,14 +336,17 @@ export default function MenuScheduleModal({
       setSchedules(
         json.data
       );
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error loading menu schedules:",
         error
       );
 
       toast.error(
-        "No se pudieron cargar los horarios."
+        currentMessages()
+          .schedulesLoadError
       );
     } finally {
       setLoading(
@@ -389,9 +427,15 @@ export default function MenuScheduleModal({
   }
 
   async function createSchedule() {
-    if (!menu) {
+    const currentMenu =
+      menu;
+
+    if (!currentMenu) {
       return;
     }
+
+    const activeMessages =
+      currentMessages();
 
     if (
       invalidTimeRange(
@@ -400,7 +444,8 @@ export default function MenuScheduleModal({
       )
     ) {
       toast.error(
-        "La hora de apertura y cierre no pueden ser iguales."
+        activeMessages
+          .equalTimesError
       );
 
       return;
@@ -426,7 +471,7 @@ export default function MenuScheduleModal({
             body:
               JSON.stringify({
                 menuId:
-                  menu.id,
+                  currentMenu.id,
 
                 dayOfWeek,
 
@@ -448,29 +493,32 @@ export default function MenuScheduleModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudo crear el horario."
+          activeMessages
+            .scheduleCreateError
         );
 
         return;
       }
 
       toast.success(
-        "Horario añadido."
+        activeMessages
+          .scheduleCreateSuccess
       );
 
       resetForm();
 
       await loadSchedules();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error creating menu schedule:",
         error
       );
 
       toast.error(
-        "No se pudo crear el horario."
+        activeMessages
+          .scheduleCreateError
       );
     } finally {
       setSaving(
@@ -480,16 +528,23 @@ export default function MenuScheduleModal({
   }
 
   async function applyScheduleToDays() {
-    if (!menu) {
+    const currentMenu =
+      menu;
+
+    if (!currentMenu) {
       return;
     }
+
+    const activeMessages =
+      currentMessages();
 
     if (
       selectedDays.length ===
       0
     ) {
       toast.error(
-        "Selecciona al menos un día."
+        activeMessages
+          .selectDayError
       );
 
       return;
@@ -502,7 +557,8 @@ export default function MenuScheduleModal({
       )
     ) {
       toast.error(
-        "La hora de apertura y cierre no pueden ser iguales."
+        activeMessages
+          .equalTimesError
       );
 
       return;
@@ -528,7 +584,7 @@ export default function MenuScheduleModal({
             body:
               JSON.stringify({
                 menuId:
-                  menu.id,
+                  currentMenu.id,
 
                 daysOfWeek:
                   selectedDays,
@@ -553,16 +609,16 @@ export default function MenuScheduleModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudo aplicar el horario."
+          activeMessages
+            .scheduleApplyError
         );
 
         return;
       }
 
       toast.success(
-        "Horario aplicado a los días seleccionados."
+        activeMessages
+          .scheduleApplySuccess
       );
 
       setSelectedDays(
@@ -570,14 +626,17 @@ export default function MenuScheduleModal({
       );
 
       await loadSchedules();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error applying menu schedule:",
         error
       );
 
       toast.error(
-        "No se pudo aplicar el horario."
+        activeMessages
+          .scheduleApplyError
       );
     } finally {
       setApplyingSchedule(
@@ -589,6 +648,9 @@ export default function MenuScheduleModal({
   async function updateScheduleInline(
     schedule: Schedule
   ) {
+    const activeMessages =
+      currentMessages();
+
     if (
       invalidTimeRange(
         editingOpenTime,
@@ -596,7 +658,8 @@ export default function MenuScheduleModal({
       )
     ) {
       toast.error(
-        "La hora de apertura y cierre no pueden ser iguales."
+        activeMessages
+          .equalTimesError
       );
 
       return;
@@ -638,29 +701,32 @@ export default function MenuScheduleModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudo actualizar el horario."
+          activeMessages
+            .scheduleUpdateError
         );
 
         return;
       }
 
       toast.success(
-        "Horario actualizado correctamente."
+        activeMessages
+          .scheduleUpdateSuccess
       );
 
       cancelEdit();
 
       await loadSchedules();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error updating menu schedule:",
         error
       );
 
       toast.error(
-        "No se pudo actualizar el horario."
+        activeMessages
+          .scheduleUpdateError
       );
     } finally {
       setSavingScheduleId(
@@ -672,6 +738,9 @@ export default function MenuScheduleModal({
   async function toggleSchedule(
     schedule: Schedule
   ) {
+    const activeMessages =
+      currentMessages();
+
     try {
       const response =
         await adminFetch(
@@ -701,23 +770,25 @@ export default function MenuScheduleModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudo actualizar el horario."
+          activeMessages
+            .scheduleUpdateError
         );
 
         return;
       }
 
       await loadSchedules();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error toggling menu schedule:",
         error
       );
 
       toast.error(
-        "No se pudo actualizar el horario."
+        activeMessages
+          .scheduleUpdateError
       );
     }
   }
@@ -725,9 +796,12 @@ export default function MenuScheduleModal({
   async function deleteSchedule(
     schedule: Schedule
   ) {
+    const activeMessages =
+      currentMessages();
+
     if (
       !window.confirm(
-        `¿Eliminar el horario ${schedule.openTime} → ${schedule.closeTime}?`
+        `${activeMessages.scheduleDeleteConfirm} ${schedule.openTime} → ${schedule.closeTime}?`
       )
     ) {
       return;
@@ -751,9 +825,8 @@ export default function MenuScheduleModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudo eliminar el horario."
+          activeMessages
+            .scheduleDeleteError
         );
 
         return;
@@ -767,33 +840,44 @@ export default function MenuScheduleModal({
       }
 
       toast.success(
-        "Horario eliminado."
+        activeMessages
+          .scheduleDeleteSuccess
       );
 
       await loadSchedules();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error deleting menu schedule:",
         error
       );
 
       toast.error(
-        "No se pudo eliminar el horario."
+        activeMessages
+          .scheduleDeleteError
       );
     }
   }
 
   async function deleteAllSchedules() {
-    if (!menu) {
+    const currentMenu =
+      menu;
+
+    if (!currentMenu) {
       return;
     }
+
+    const activeMessages =
+      currentMessages();
 
     if (
       schedules.length ===
       0
     ) {
       toast.info(
-        "No hay franjas horarias que eliminar."
+        activeMessages
+          .noSchedulesToDelete
       );
 
       return;
@@ -801,9 +885,9 @@ export default function MenuScheduleModal({
 
     if (
       !window.confirm(
-        `¿Eliminar todas las franjas horarias de "${getMenuName(
-          menu.name
-        )}"?\n\nEsta acción no se puede deshacer.`
+        `${activeMessages.deleteAllConfirmPrefix} "${getMenuName(
+          currentMenu.name
+        )}"?\n\n${activeMessages.deleteAllConfirmSuffix}`
       )
     ) {
       return;
@@ -816,7 +900,7 @@ export default function MenuScheduleModal({
     try {
       const response =
         await adminFetch(
-          `/api/menu-schedules?menuId=${menu.id}`,
+          `/api/menu-schedules?menuId=${currentMenu.id}`,
           {
             method:
               "DELETE",
@@ -831,9 +915,8 @@ export default function MenuScheduleModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudieron eliminar las franjas horarias."
+          activeMessages
+            .deleteAllError
         );
 
         return;
@@ -846,18 +929,22 @@ export default function MenuScheduleModal({
       );
 
       toast.success(
-        "Todas las franjas horarias han sido eliminadas."
+        activeMessages
+          .deleteAllSuccess
       );
 
       await loadSchedules();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error deleting all menu schedules:",
         error
       );
 
       toast.error(
-        "No se pudieron eliminar las franjas horarias."
+        activeMessages
+          .deleteAllError
       );
     } finally {
       setDeletingAll(
@@ -875,7 +962,7 @@ export default function MenuScheduleModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl">
         <div className="flex items-center justify-between border-b p-6">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100">
@@ -889,7 +976,9 @@ export default function MenuScheduleModal({
 
             <div>
               <h2 className="text-xl font-bold">
-                Horarios
+                {
+                  messages.scheduleTitle
+                }
               </h2>
 
               <p className="text-sm text-gray-500">
@@ -905,6 +994,9 @@ export default function MenuScheduleModal({
             onClick={
               onClose
             }
+            title={
+              messages.cancel
+            }
             className="rounded-xl p-2 hover:bg-gray-100"
           >
             <X
@@ -918,13 +1010,17 @@ export default function MenuScheduleModal({
         <div className="max-h-[calc(90vh-90px)] overflow-y-auto p-6">
           <div className="mb-6 rounded-2xl border bg-gray-50 p-5">
             <h3 className="mb-4 font-semibold">
-              Añadir horario
+              {
+                messages.addSchedule
+              }
             </h3>
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               <div>
                 <label className="mb-1 block text-sm font-medium">
-                  Día
+                  {
+                    messages.day
+                  }
                 </label>
 
                 <select
@@ -942,14 +1038,14 @@ export default function MenuScheduleModal({
                   }
                   className="w-full rounded-xl border bg-white px-3 py-2.5"
                 >
-                  {DAYS.map(
+                  {days.map(
                     (
                       day,
                       index
                     ) => (
                       <option
                         key={
-                          day
+                          index
                         }
                         value={
                           index
@@ -966,7 +1062,9 @@ export default function MenuScheduleModal({
 
               <div>
                 <label className="mb-1 block text-sm font-medium">
-                  Apertura
+                  {
+                    messages.opening
+                  }
                 </label>
 
                 <input
@@ -987,7 +1085,9 @@ export default function MenuScheduleModal({
 
               <div>
                 <label className="mb-1 block text-sm font-medium">
-                  Cierre
+                  {
+                    messages.closing
+                  }
                 </label>
 
                 <input
@@ -1015,7 +1115,7 @@ export default function MenuScheduleModal({
                   disabled={
                     saving
                   }
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-white transition hover:bg-indigo-700 disabled:opacity-50"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Plus
                     size={
@@ -1024,14 +1124,16 @@ export default function MenuScheduleModal({
                   />
 
                   {saving
-                    ? "Guardando..."
-                    : "Añadir"}
+                    ? messages.saving
+                    : messages.add}
                 </button>
               </div>
             </div>
 
             <p className="mt-3 text-xs text-gray-500">
-              Los horarios pueden atravesar medianoche, por ejemplo 20:00 → 02:00.
+              {
+                messages.overnightHint
+              }
             </p>
           </div>
 
@@ -1048,11 +1150,15 @@ export default function MenuScheduleModal({
 
               <div>
                 <h3 className="font-semibold text-gray-900">
-                  Aplicar horario a varios días
+                  {
+                    messages.applyMultipleTitle
+                  }
                 </h3>
 
                 <p className="text-sm text-gray-600">
-                  Configura la misma franja para varios días de la semana.
+                  {
+                    messages.applyMultipleDescription
+                  }
                 </p>
               </div>
             </div>
@@ -1072,11 +1178,11 @@ export default function MenuScheduleModal({
               >
                 {selectedDays.length ===
                 7
-                  ? "Quitar todos"
-                  : "Todos los días"}
+                  ? messages.deselectAllDays
+                  : messages.selectAllDays}
               </button>
 
-              {DAYS.map(
+              {days.map(
                 (
                   day,
                   index
@@ -1089,7 +1195,7 @@ export default function MenuScheduleModal({
                   return (
                     <button
                       key={
-                        day
+                        index
                       }
                       type="button"
                       onClick={() =>
@@ -1115,7 +1221,9 @@ export default function MenuScheduleModal({
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div>
                 <label className="mb-1 block text-sm font-medium">
-                  Apertura
+                  {
+                    messages.opening
+                  }
                 </label>
 
                 <input
@@ -1136,7 +1244,9 @@ export default function MenuScheduleModal({
 
               <div>
                 <label className="mb-1 block text-sm font-medium">
-                  Cierre
+                  {
+                    messages.closing
+                  }
                 </label>
 
                 <input
@@ -1175,8 +1285,8 @@ export default function MenuScheduleModal({
                   />
 
                   {applyingSchedule
-                    ? "Aplicando..."
-                    : "Aplicar horario"}
+                    ? messages.applying
+                    : messages.applySchedule}
                 </button>
               </div>
             </div>
@@ -1185,11 +1295,15 @@ export default function MenuScheduleModal({
           <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-red-200 bg-red-50 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="font-semibold text-red-800">
-                Gestión de horarios
+                {
+                  messages.scheduleManagementTitle
+                }
               </h3>
 
               <p className="text-sm text-red-700">
-                Elimina todas las franjas horarias configuradas para este menú.
+                {
+                  messages.scheduleManagementDescription
+                }
               </p>
             </div>
 
@@ -1213,18 +1327,20 @@ export default function MenuScheduleModal({
               />
 
               {deletingAll
-                ? "Eliminando..."
-                : "Eliminar todos los horarios"}
+                ? messages.deleting
+                : messages.deleteAllSchedules}
             </button>
           </div>
 
           {loading ? (
             <div className="py-10 text-center text-gray-500">
-              Cargando horarios...
+              {
+                messages.loadingSchedules
+              }
             </div>
           ) : (
             <div className="space-y-4">
-              {DAYS.map(
+              {days.map(
                 (
                   day,
                   dayIndex
@@ -1237,7 +1353,7 @@ export default function MenuScheduleModal({
                   return (
                     <div
                       key={
-                        day
+                        dayIndex
                       }
                       className="overflow-hidden rounded-2xl border"
                     >
@@ -1254,8 +1370,8 @@ export default function MenuScheduleModal({
                           }{" "}
                           {daySchedules.length ===
                           1
-                            ? "franja"
-                            : "franjas"}
+                            ? messages.slot
+                            : messages.slots}
                         </span>
                       </div>
 
@@ -1263,7 +1379,9 @@ export default function MenuScheduleModal({
                         {daySchedules.length ===
                         0 ? (
                           <p className="text-sm text-gray-400">
-                            Sin horario configurado.
+                            {
+                              messages.noScheduleConfigured
+                            }
                           </p>
                         ) : (
                           <div className="space-y-2">
@@ -1304,7 +1422,9 @@ export default function MenuScheduleModal({
                                         <div className="flex flex-1 items-center gap-3">
                                           <div className="flex-1">
                                             <label className="mb-1 block text-xs text-gray-500">
-                                              Apertura
+                                              {
+                                                messages.opening
+                                              }
                                             </label>
 
                                             <input
@@ -1329,7 +1449,9 @@ export default function MenuScheduleModal({
 
                                           <div className="flex-1">
                                             <label className="mb-1 block text-xs text-gray-500">
-                                              Cierre
+                                              {
+                                                messages.closing
+                                              }
                                             </label>
 
                                             <input
@@ -1360,8 +1482,10 @@ export default function MenuScheduleModal({
                                             disabled={
                                               isSaving
                                             }
-                                            className="rounded-lg bg-green-600 p-2 text-white hover:bg-green-700 disabled:opacity-50"
-                                            title="Guardar"
+                                            className="rounded-lg bg-green-600 p-2 text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                            title={
+                                              messages.save
+                                            }
                                           >
                                             <Check
                                               size={
@@ -1378,8 +1502,10 @@ export default function MenuScheduleModal({
                                             disabled={
                                               isSaving
                                             }
-                                            className="rounded-lg border p-2 hover:bg-gray-100 disabled:opacity-50"
-                                            title="Cancelar"
+                                            className="rounded-lg border p-2 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                            title={
+                                              messages.cancel
+                                            }
                                           >
                                             <X
                                               size={
@@ -1417,8 +1543,8 @@ export default function MenuScheduleModal({
                                             }`}
                                           >
                                             {schedule.active
-                                              ? "Activo"
-                                              : "Inactivo"}
+                                              ? messages.active
+                                              : messages.inactive}
                                           </span>
                                         </div>
 
@@ -1431,7 +1557,9 @@ export default function MenuScheduleModal({
                                               )
                                             }
                                             className="rounded-lg border p-2 hover:bg-indigo-50"
-                                            title="Editar horario"
+                                            title={
+                                              messages.editSchedule
+                                            }
                                           >
                                             <Pencil
                                               size={
@@ -1451,8 +1579,8 @@ export default function MenuScheduleModal({
                                             className="rounded-lg border p-2 hover:bg-gray-50"
                                             title={
                                               schedule.active
-                                                ? "Desactivar"
-                                                : "Activar"
+                                                ? messages.deactivate
+                                                : messages.activate
                                             }
                                           >
                                             {schedule.active ? (
@@ -1480,7 +1608,9 @@ export default function MenuScheduleModal({
                                               )
                                             }
                                             className="rounded-lg border p-2 hover:bg-red-50"
-                                            title="Eliminar horario"
+                                            title={
+                                              messages.deleteSchedule
+                                            }
                                           >
                                             <Trash2
                                               size={

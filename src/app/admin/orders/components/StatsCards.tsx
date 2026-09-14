@@ -1,11 +1,19 @@
-'use client';
+"use client";
 
 import {
-  ShoppingCart,
-  Clock,
-  ChefHat,
   CheckCircle,
-} from 'lucide-react';
+  ChefHat,
+  Clock,
+  ShoppingCart,
+} from "lucide-react";
+
+import {
+  ADMIN_ORDERS_MESSAGES,
+} from "@/config/admin-orders-i18n";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Props {
   total: number;
@@ -20,77 +28,96 @@ export default function StatsCards({
   preparing,
   delivered,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_ORDERS_MESSAGES[
+      language
+    ];
 
   const cards = [
     {
-      title: 'Pedidos',
+      key: "orders",
+      title:
+        messages.stats.orders,
       value: total,
       icon: ShoppingCart,
-      color: 'bg-indigo-500',
+      color: "bg-indigo-500",
     },
     {
-      title: 'Pendientes',
+      key: "pending",
+      title:
+        messages.stats.pending,
       value: pending,
       icon: Clock,
-      color: 'bg-yellow-500',
+      color: "bg-yellow-500",
     },
     {
-      title: 'Preparando',
+      key: "preparing",
+      title:
+        messages.stats.preparing,
       value: preparing,
       icon: ChefHat,
-      color: 'bg-orange-500',
+      color: "bg-orange-500",
     },
     {
-      title: 'Entregados',
+      key: "delivered",
+      title:
+        messages.stats.delivered,
       value: delivered,
       icon: CheckCircle,
-      color: 'bg-green-500',
+      color: "bg-green-500",
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+      {cards.map(
+        (card) => {
+          const Icon =
+            card.icon;
 
-      {cards.map((card) => {
+          return (
+            <div
+              key={
+                card.key
+              }
+              className="rounded-2xl border bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">
+                    {
+                      card.title
+                    }
+                  </p>
 
-        const Icon = card.icon;
+                  <h2 className="mt-2 text-3xl font-bold">
+                    {
+                      card.value
+                    }
+                  </h2>
+                </div>
 
-        return (
-          <div
-            key={card.title}
-            className="bg-white rounded-2xl shadow-sm border p-5"
-          >
-
-            <div className="flex justify-between items-center">
-
-              <div>
-
-                <p className="text-sm text-gray-500">
-                  {card.title}
-                </p>
-
-                <h2 className="text-3xl font-bold mt-2">
-                  {card.value}
-                </h2>
-
+                <div
+                  className={`${card.color} flex h-12 w-12 items-center justify-center rounded-xl`}
+                >
+                  <Icon
+                    size={
+                      22
+                    }
+                    className="text-white"
+                  />
+                </div>
               </div>
-
-              <div
-                className={`${card.color} w-12 h-12 rounded-xl flex items-center justify-center`}
-              >
-                <Icon
-                  size={22}
-                  className="text-white"
-                />
-              </div>
-
             </div>
-
-          </div>
-        );
-
-      })}
-
+          );
+        }
+      )}
     </div>
   );
 }

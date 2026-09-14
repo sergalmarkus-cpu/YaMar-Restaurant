@@ -9,8 +9,16 @@ import {
 } from "sonner";
 
 import {
+  ADMIN_MENUS_MESSAGES,
+} from "@/config/admin-menus-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Props {
   open: boolean;
@@ -23,6 +31,17 @@ export default function NewMenuModal({
   onClose,
   onCreated,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_MENUS_MESSAGES[
+      language
+    ];
+
   const [
     name,
     setName,
@@ -55,16 +74,28 @@ export default function NewMenuModal({
   ] =
     useState(false);
 
+  function currentMessages() {
+    return ADMIN_MENUS_MESSAGES[
+      useAdminLanguageStore
+        .getState()
+        .language
+    ];
+  }
+
   if (!open) {
     return null;
   }
 
   async function createMenu() {
+    const activeMessages =
+      currentMessages();
+
     if (
       !name.trim()
     ) {
       toast.error(
-        "Introduce un nombre para el menú."
+        activeMessages
+          .menuNameRequired
       );
 
       return;
@@ -118,45 +149,41 @@ export default function NewMenuModal({
         !json.success
       ) {
         toast.error(
-          json.error ||
-            json.message ||
-            "No se pudo crear el menú."
+          activeMessages
+            .createError
         );
 
         return;
       }
 
-      setName(
-        ""
-      );
-
+      setName("");
       setType(
         "restaurant"
       );
-
-      setIcon(
-        ""
-      );
-
+      setIcon("");
       setDisplayOrder(
         0
       );
 
       toast.success(
-        "Menú creado."
+        activeMessages
+          .createSuccess
       );
 
       await onCreated();
 
       onClose();
-    } catch (error) {
+    } catch (
+      error
+    ) {
       console.error(
         "Error creating menu:",
         error
       );
 
       toast.error(
-        "No se pudo crear el menú."
+        activeMessages
+          .createError
       );
     } finally {
       setSaving(
@@ -166,18 +193,22 @@ export default function NewMenuModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-5">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5">
+      <div className="w-full max-w-xl rounded-2xl bg-white shadow-xl">
         <div className="border-b p-6">
           <h2 className="text-xl font-bold">
-            Nuevo menú
+            {
+              messages.createTitle
+            }
           </h2>
         </div>
 
-        <div className="p-6 space-y-5">
+        <div className="space-y-5 p-6">
           <div>
-            <label className="block text-sm mb-2">
-              Nombre
+            <label className="mb-2 block text-sm">
+              {
+                messages.menuName
+              }
             </label>
 
             <input
@@ -191,14 +222,18 @@ export default function NewMenuModal({
                   event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
-              placeholder="Ej: Carta Restaurante"
+              className="w-full rounded-xl border p-3"
+              placeholder={
+                messages.menuNamePlaceholder
+              }
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Tipo
+            <label className="mb-2 block text-sm">
+              {
+                messages.menuType
+              }
             </label>
 
             <select
@@ -212,41 +247,57 @@ export default function NewMenuModal({
                   event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             >
               <option value="restaurant">
-                Restaurante
+                {
+                  messages.restaurant
+                }
               </option>
 
               <option value="snacks">
-                Snacks
+                {
+                  messages.snacks
+                }
               </option>
 
               <option value="coffee">
-                Cafetería
+                {
+                  messages.coffee
+                }
               </option>
 
               <option value="cocktails">
-                Cócteles
+                {
+                  messages.cocktails
+                }
               </option>
 
               <option value="breakfast">
-                Desayunos
+                {
+                  messages.breakfast
+                }
               </option>
 
               <option value="desserts">
-                Postres
+                {
+                  messages.desserts
+                }
               </option>
 
               <option value="custom">
-                Personalizado
+                {
+                  messages.custom
+                }
               </option>
             </select>
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Icono
+            <label className="mb-2 block text-sm">
+              {
+                messages.icon
+              }
             </label>
 
             <input
@@ -260,21 +311,23 @@ export default function NewMenuModal({
                   event.target.value
                 )
               }
-              className="w-full border rounded-xl p-3"
-              placeholder="🍽️ ☕ 🍷 🥗"
+              className="w-full rounded-xl border p-3"
+              placeholder={
+                messages.iconPlaceholder
+              }
             />
           </div>
 
           <div>
-            <label className="block text-sm mb-2">
-              Orden de visualización
+            <label className="mb-2 block text-sm">
+              {
+                messages.displayOrder
+              }
             </label>
 
             <input
               type="number"
-              min={
-                0
-              }
+              min={0}
               value={
                 displayOrder
               }
@@ -287,12 +340,12 @@ export default function NewMenuModal({
                   )
                 )
               }
-              className="w-full border rounded-xl p-3"
+              className="w-full rounded-xl border p-3"
             />
           </div>
         </div>
 
-        <div className="border-t p-6 flex justify-end gap-3">
+        <div className="flex justify-end gap-3 border-t p-6">
           <button
             type="button"
             onClick={
@@ -301,9 +354,11 @@ export default function NewMenuModal({
             disabled={
               saving
             }
-            className="px-5 py-3 border rounded-xl"
+            className="rounded-xl border px-5 py-3"
           >
-            Cancelar
+            {
+              messages.cancel
+            }
           </button>
 
           <button
@@ -314,11 +369,11 @@ export default function NewMenuModal({
             onClick={() =>
               void createMenu()
             }
-            className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl disabled:opacity-50"
+            className="rounded-xl bg-indigo-600 px-5 py-3 text-white hover:bg-indigo-700 disabled:opacity-50"
           >
             {saving
-              ? "Guardando..."
-              : "Guardar"}
+              ? messages.saving
+              : messages.save}
           </button>
         </div>
       </div>

@@ -10,6 +10,19 @@ import {
   YAxis,
 } from "recharts";
 
+import {
+  ADMIN_DASHBOARD_MESSAGES,
+  type AdminDashboardLanguage,
+} from "@/config/admin-dashboard-i18n";
+
+import {
+  ADMIN_LANGUAGE_LOCALES,
+} from "@/config/admin-languages";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
+
 interface SalesDay {
   date: string;
   label: string;
@@ -23,11 +36,12 @@ interface Props {
 
 function formatMoney(
   value: number,
-  currency: string
+  currency: string,
+  locale: string
 ) {
   try {
     return new Intl.NumberFormat(
-      "es-ES",
+      locale,
       {
         style:
           "currency",
@@ -51,21 +65,41 @@ export default function SalesChart({
   data,
   currency,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (
+        state
+      ) =>
+        state.language
+    ) as AdminDashboardLanguage;
+
+  const messages =
+    ADMIN_DASHBOARD_MESSAGES[
+      language
+    ].salesChart;
+
+  const locale =
+    ADMIN_LANGUAGE_LOCALES[
+      language
+    ];
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-
       <div className="mb-5">
         <h3 className="text-lg font-semibold text-slate-900">
-          Ventas de los últimos 7 días
+          {
+            messages.title
+          }
         </h3>
 
         <p className="mt-1 text-sm text-slate-500">
-          Importes efectivamente cobrados.
+          {
+            messages.description
+          }
         </p>
       </div>
 
       <div className="h-[300px] w-full">
-
         <ResponsiveContainer
           width="100%"
           height="100%"
@@ -100,7 +134,8 @@ export default function SalesChart({
                   Number(
                     value
                   ),
-                  currency
+                  currency,
+                  locale
                 )
               }
             />
@@ -124,9 +159,10 @@ export default function SalesChart({
                     value ??
                       0
                   ),
-                  currency
+                  currency,
+                  locale
                 ),
-                "Ventas",
+                messages.sales,
               ]}
             />
 
@@ -149,12 +185,9 @@ export default function SalesChart({
                   6,
               }}
             />
-
           </LineChart>
         </ResponsiveContainer>
-
       </div>
-
     </div>
   );
 }

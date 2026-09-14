@@ -1,6 +1,17 @@
-'use client';
+"use client";
 
-import { Download, X } from 'lucide-react';
+import {
+  Download,
+  X,
+} from "lucide-react";
+
+import {
+  ADMIN_TABLES_MESSAGES,
+} from "@/config/admin-tables-i18n";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface Props {
   open: boolean;
@@ -15,85 +26,120 @@ export default function QRModal({
   qrImage,
   onClose,
 }: Props) {
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
 
-  if (!open) return null;
+  const messages =
+    ADMIN_TABLES_MESSAGES[
+      language
+    ];
+
+  if (
+    !open
+  ) {
+    return null;
+  }
 
   function downloadQR() {
+    const link =
+      document.createElement(
+        "a"
+      );
 
-    const link = document.createElement('a');
+    link.href =
+      qrImage;
 
-    link.href = qrImage;
-    link.download = `mesa-${tableCode}.png`;
+    link.download =
+      `mesa-${tableCode}.png`;
 
     link.click();
-
   }
 
   return (
-
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-5">
-
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
-
-        <div className="flex justify-between items-center border-b p-6">
-
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b p-6">
           <div>
-
             <h2 className="text-xl font-bold">
-              Código QR
+              {
+                messages.qrCode
+              }
             </h2>
 
-            <p className="text-gray-500 text-sm mt-1">
-              Mesa {tableCode}
+            <p className="mt-1 text-sm text-gray-500">
+              {
+                messages.table
+              }{" "}
+              {
+                tableCode
+              }
             </p>
-
           </div>
 
           <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100"
+            type="button"
+            onClick={
+              onClose
+            }
+            title={
+              messages.close
+            }
+            aria-label={
+              messages.close
+            }
+            className="rounded-lg p-2 hover:bg-gray-100"
           >
-            <X size={20} />
+            <X
+              size={20}
+            />
           </button>
-
         </div>
 
         <div className="p-8">
-
           <img
-            src={qrImage}
-            alt="Código QR"
+            src={
+              qrImage
+            }
+            alt={
+              messages.qrAlt
+            }
             className="w-full rounded-xl border"
           />
-
         </div>
 
-        <div className="border-t p-6 flex gap-3">
-
+        <div className="flex gap-3 border-t p-6">
           <button
-            onClick={downloadQR}
-            className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl py-3 flex items-center justify-center gap-2 transition"
+            type="button"
+            onClick={
+              downloadQR
+            }
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-white transition hover:bg-indigo-700"
           >
+            <Download
+              size={18}
+            />
 
-            <Download size={18} />
-
-            Descargar
-
+            {
+              messages.download
+            }
           </button>
 
           <button
-            onClick={onClose}
-            className="px-5 border rounded-xl hover:bg-gray-100 transition"
+            type="button"
+            onClick={
+              onClose
+            }
+            className="rounded-xl border px-5 hover:bg-gray-100"
           >
-            Cerrar
+            {
+              messages.close
+            }
           </button>
-
         </div>
-
       </div>
-
     </div>
-
   );
-
 }

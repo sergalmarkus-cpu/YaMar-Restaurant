@@ -22,8 +22,16 @@ import {
 } from "lucide-react";
 
 import {
+  ADMIN_INTEGRATIONS_MESSAGES,
+} from "@/config/admin-integrations-i18n";
+
+import {
   adminFetch,
 } from "@/lib/api/admin-fetch";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 interface BaseIntegrationStatus {
   configured: boolean;
@@ -88,12 +96,37 @@ interface IntegrationCardProps {
   status: BaseIntegrationStatus;
   requirements: Requirement[];
   enabledDescription?: string;
+
+  labels: {
+    ready: string;
+    requiresConfiguration: string;
+
+    configuration: string;
+    complete: string;
+    incomplete: string;
+
+    enabled: string;
+    yes: string;
+    no: string;
+
+    status: string;
+    operational: string;
+    notOperational: string;
+
+    requirements: string;
+    configured: string;
+    pending: string;
+  };
 }
 
 function StatusBadge({
   ready,
+  readyLabel,
+  pendingLabel,
 }: {
   ready: boolean;
+  readyLabel: string;
+  pendingLabel: string;
 }) {
   return (
     <span
@@ -114,8 +147,8 @@ function StatusBadge({
       )}
 
       {ready
-        ? "Lista"
-        : "Requiere configuración"}
+        ? readyLabel
+        : pendingLabel}
     </span>
   );
 }
@@ -123,7 +156,12 @@ function StatusBadge({
 function RequirementRow({
   label,
   configured,
-}: Requirement) {
+  configuredLabel,
+  pendingLabel,
+}: Requirement & {
+  configuredLabel: string;
+  pendingLabel: string;
+}) {
   return (
     <div className="flex items-center justify-between gap-4 py-2">
       <span className="text-sm text-slate-600">
@@ -142,14 +180,16 @@ function RequirementRow({
             <Check
               size={16}
             />
-            Configurado
+
+            {configuredLabel}
           </>
         ) : (
           <>
             <X
               size={16}
             />
-            Pendiente
+
+            {pendingLabel}
           </>
         )}
       </span>
@@ -165,6 +205,7 @@ function IntegrationCard({
   status,
   requirements,
   enabledDescription,
+  labels,
 }: IntegrationCardProps) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -196,13 +237,21 @@ function IntegrationCard({
             ready={
               status.ready
             }
+            readyLabel={
+              labels.ready
+            }
+            pendingLabel={
+              labels.requiresConfiguration
+            }
           />
         </div>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Configuración
+              {
+                labels.configuration
+              }
             </p>
 
             <p
@@ -213,14 +262,16 @@ function IntegrationCard({
               }`}
             >
               {status.configured
-                ? "Completa"
-                : "Incompleta"}
+                ? labels.complete
+                : labels.incomplete}
             </p>
           </div>
 
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Habilitada
+              {
+                labels.enabled
+              }
             </p>
 
             <p
@@ -231,14 +282,16 @@ function IntegrationCard({
               }`}
             >
               {status.enabled
-                ? "Sí"
-                : "No"}
+                ? labels.yes
+                : labels.no}
             </p>
           </div>
 
           <div className="rounded-xl bg-slate-50 p-4">
             <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Estado
+              {
+                labels.status
+              }
             </p>
 
             <p
@@ -249,22 +302,26 @@ function IntegrationCard({
               }`}
             >
               {status.ready
-                ? "Operativa"
-                : "No operativa"}
+                ? labels.operational
+                : labels.notOperational}
             </p>
           </div>
         </div>
 
         {enabledDescription && (
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            {enabledDescription}
+            {
+              enabledDescription
+            }
           </div>
         )}
       </div>
 
       <div className="border-t border-slate-200 bg-slate-50/60 px-6 py-4">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-          Requisitos
+          {
+            labels.requirements
+          }
         </p>
 
         <div className="divide-y divide-slate-200">
@@ -277,6 +334,12 @@ function IntegrationCard({
                   requirement.label
                 }
                 {...requirement}
+                configuredLabel={
+                  labels.configured
+                }
+                pendingLabel={
+                  labels.pending
+                }
               />
             )
           )}
@@ -287,6 +350,19 @@ function IntegrationCard({
 }
 
 export default function IntegrationsSettings() {
+  const language =
+    useAdminLanguageStore(
+      (
+        state
+      ) =>
+        state.language
+    );
+
+  const messages =
+    ADMIN_INTEGRATIONS_MESSAGES[
+      language
+    ];
+
   const [
     integrations,
     setIntegrations,
@@ -347,8 +423,7 @@ export default function IntegrationsSettings() {
             !json.data
           ) {
             setError(
-              json.error ||
-                "No se pudo cargar el estado de las integraciones."
+              messages.loadError
             );
 
             return;
@@ -358,15 +433,15 @@ export default function IntegrationsSettings() {
             json.data
           );
         } catch (
-          error
+          loadError
         ) {
           console.error(
             "Error loading integrations:",
-            error
+            loadError
           );
 
           setError(
-            "No se pudo cargar el estado de las integraciones."
+            messages.loadError
           );
         } finally {
           setLoading(
@@ -378,7 +453,9 @@ export default function IntegrationsSettings() {
           );
         }
       },
-      []
+      [
+        messages.loadError,
+      ]
     );
 
   useEffect(() => {
@@ -425,7 +502,9 @@ export default function IntegrationsSettings() {
           />
 
           <span>
-            Cargando integraciones...
+            {
+              messages.loading
+            }
           </span>
         </div>
       </div>
@@ -444,11 +523,17 @@ export default function IntegrationsSettings() {
 
             <div>
               <h1 className="text-2xl font-bold text-slate-900">
-                Integraciones
+                {
+                  messages.page
+                    .title
+                }
               </h1>
 
               <p className="text-sm text-slate-500">
-                Comprueba el estado de los servicios externos utilizados por YaMar.
+                {
+                  messages.page
+                    .subtitle
+                }
               </p>
             </div>
           </div>
@@ -476,8 +561,10 @@ export default function IntegrationsSettings() {
           />
 
           {refreshing
-            ? "Actualizando..."
-            : "Actualizar estado"}
+            ? messages.page
+                .refreshing
+            : messages.page
+                .refresh}
         </button>
       </div>
 
@@ -488,9 +575,10 @@ export default function IntegrationsSettings() {
         />
 
         <div>
-          Las credenciales y secretos de las integraciones no se muestran en esta pantalla.
-          El panel únicamente indica si cada requisito está configurado y si el servicio
-          está listo para utilizarse.
+          {
+            messages.page
+              .securityNotice
+          }
         </div>
       </div>
 
@@ -505,7 +593,10 @@ export default function IntegrationsSettings() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm text-slate-500">
-                Integraciones
+                {
+                  messages.stats
+                    .integrations
+                }
               </p>
 
               <p className="mt-2 text-2xl font-bold text-slate-900">
@@ -515,17 +606,25 @@ export default function IntegrationsSettings() {
 
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm text-slate-500">
-                Operativas
+                {
+                  messages.stats
+                    .ready
+                }
               </p>
 
               <p className="mt-2 text-2xl font-bold text-green-700">
-                {readyCount}
+                {
+                  readyCount
+                }
               </p>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm text-slate-500">
-                Pendientes
+                {
+                  messages.stats
+                    .pending
+                }
               </p>
 
               <p className="mt-2 text-2xl font-bold text-amber-700">
@@ -536,7 +635,10 @@ export default function IntegrationsSettings() {
 
             <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <p className="text-sm text-slate-500">
-                Tenant
+                {
+                  messages.stats
+                    .tenant
+                }
               </p>
 
               <p className="mt-2 text-2xl font-bold text-slate-900">
@@ -550,9 +652,15 @@ export default function IntegrationsSettings() {
 
           <div className="grid gap-6 xl:grid-cols-2">
             <IntegrationCard
-              title="Pagos online"
+              title={
+                messages.stripe
+                  .title
+              }
               provider="Stripe"
-              description="Procesamiento seguro de pagos digitales realizados por los clientes desde YaMar."
+              description={
+                messages.stripe
+                  .description
+              }
               icon={
                 <CreditCard
                   size={23}
@@ -563,38 +671,55 @@ export default function IntegrationsSettings() {
               }
               enabledDescription={
                 integrations.stripe.enabled
-                  ? "El pago online está habilitado para este establecimiento."
-                  : "Stripe puede estar configurado globalmente, pero el pago online está deshabilitado para este establecimiento."
+                  ? messages.stripe
+                      .enabled
+                  : messages.stripe
+                      .disabled
               }
               requirements={[
                 {
                   label:
-                    "Clave pública",
+                    messages.stripe
+                      .requirements
+                      .publishableKey,
                   configured:
                     integrations.stripe
                       .publishableKeyConfigured,
                 },
                 {
                   label:
-                    "Clave secreta",
+                    messages.stripe
+                      .requirements
+                      .secretKey,
                   configured:
                     integrations.stripe
                       .secretKeyConfigured,
                 },
                 {
                   label:
-                    "Webhook",
+                    messages.stripe
+                      .requirements
+                      .webhook,
                   configured:
                     integrations.stripe
                       .webhookConfigured,
                 },
               ]}
+              labels={
+                messages.common
+              }
             />
 
             <IntegrationCard
-              title="Correo electrónico"
+              title={
+                messages.email
+                  .title
+              }
               provider="Resend"
-              description="Envío de recibos electrónicos y comunicaciones por correo desde la plataforma."
+              description={
+                messages.email
+                  .description
+              }
               icon={
                 <Mail
                   size={23}
@@ -606,25 +731,38 @@ export default function IntegrationsSettings() {
               requirements={[
                 {
                   label:
-                    "API key",
+                    messages.email
+                      .requirements
+                      .apiKey,
                   configured:
                     integrations.email
                       .apiKeyConfigured,
                 },
                 {
                   label:
-                    "Remitente",
+                    messages.email
+                      .requirements
+                      .sender,
                   configured:
                     integrations.email
                       .senderConfigured,
                 },
               ]}
+              labels={
+                messages.common
+              }
             />
 
             <IntegrationCard
-              title="Mensajería SMS"
+              title={
+                messages.sms
+                  .title
+              }
               provider="Twilio"
-              description="Infraestructura preparada para comunicaciones y notificaciones mediante SMS."
+              description={
+                messages.sms
+                  .description
+              }
               icon={
                 <MessageSquareText
                   size={23}
@@ -636,32 +774,47 @@ export default function IntegrationsSettings() {
               requirements={[
                 {
                   label:
-                    "Account SID",
+                    messages.sms
+                      .requirements
+                      .accountSid,
                   configured:
                     integrations.sms
                       .accountConfigured,
                 },
                 {
                   label:
-                    "Auth token",
+                    messages.sms
+                      .requirements
+                      .authToken,
                   configured:
                     integrations.sms
                       .tokenConfigured,
                 },
                 {
                   label:
-                    "Número de teléfono",
+                    messages.sms
+                      .requirements
+                      .phoneNumber,
                   configured:
                     integrations.sms
                       .phoneConfigured,
                 },
               ]}
+              labels={
+                messages.common
+              }
             />
 
             <IntegrationCard
-              title="Analítica"
+              title={
+                messages.analytics
+                  .title
+              }
               provider="Google Analytics"
-              description="Medición del uso de la aplicación y análisis de la actividad digital del establecimiento."
+              description={
+                messages.analytics
+                  .description
+              }
               icon={
                 <BarChart3
                   size={23}
@@ -673,12 +826,17 @@ export default function IntegrationsSettings() {
               requirements={[
                 {
                   label:
-                    "Measurement ID",
+                    messages.analytics
+                      .requirements
+                      .measurementId,
                   configured:
                     integrations.analytics
                       .measurementIdConfigured,
                 },
               ]}
+              labels={
+                messages.common
+              }
             />
           </div>
         </>

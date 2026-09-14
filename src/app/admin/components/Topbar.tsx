@@ -1,31 +1,52 @@
-'use client';
+"use client";
 
 import {
   useCallback,
   useEffect,
+  useMemo,
+  useRef,
   useState,
-} from 'react';
+} from "react";
 
 import {
   useRouter,
-} from 'next/navigation';
+} from "next/navigation";
 
 import {
   Bell,
+  Check,
   ChevronDown,
+  Globe2,
   LogOut,
   Search,
   Settings,
   User,
-} from 'lucide-react';
+} from "lucide-react";
+
+import {
+  toast,
+} from "sonner";
 
 import {
   useAdminAuthStore,
-} from '@/auth/admin-auth.store';
+} from "@/auth/admin-auth.store";
+
+import {
+  useAdminLanguageStore,
+} from "@/store/admin-language.store";
 
 import {
   adminFetch,
-} from '@/lib/api/admin-fetch';
+} from "@/lib/api/admin-fetch";
+
+import {
+  ADMIN_LANGUAGES,
+  ADMIN_LANGUAGE_LOCALES,
+} from "@/config/admin-languages";
+
+import type {
+  Language,
+} from "@/types";
 
 interface TopbarProps {
   sidebarCollapsed: boolean;
@@ -38,28 +59,266 @@ interface AdminNotification {
   type: string;
   title: string;
   message: string;
-  data: Record<
-    string,
-    unknown
-  > | null;
-  read: boolean | null;
+
+  data:
+    | Record<string, unknown>
+    | null;
+
+  read:
+    | boolean
+    | null;
+
   createdAt: string;
 }
 
+interface TopbarMessages {
+  searchPlaceholder: string;
+  notifications: string;
+  unread: string;
+  loadingNotifications: string;
+  notificationsError: string;
+  noNotifications: string;
+  viewAllNotifications: string;
+  userMenu: string;
+  user: string;
+  profile: string;
+  settings: string;
+  logout: string;
+  language: string;
+  languageMenu: string;
+  now: string;
+  languageChanged: string;
+}
+
+const MESSAGES: Record<
+  Language,
+  TopbarMessages
+> = {
+  es: {
+    searchPlaceholder:
+      "Buscar pedidos, productos, mesas...",
+    notifications:
+      "Notificaciones",
+    unread:
+      "sin leer",
+    loadingNotifications:
+      "Cargando notificaciones...",
+    notificationsError:
+      "No se pudieron cargar las notificaciones.",
+    noNotifications:
+      "No tienes notificaciones.",
+    viewAllNotifications:
+      "Ver todas las notificaciones",
+    userMenu:
+      "Menú de usuario",
+    user:
+      "Usuario",
+    profile:
+      "Mi perfil",
+    settings:
+      "Configuración",
+    logout:
+      "Cerrar sesión",
+    language:
+      "Idioma",
+    languageMenu:
+      "Seleccionar idioma",
+    now:
+      "Ahora",
+    languageChanged:
+      "Idioma cambiado con éxito.",
+  },
+
+  en: {
+    searchPlaceholder:
+      "Search orders, products, tables...",
+    notifications:
+      "Notifications",
+    unread:
+      "unread",
+    loadingNotifications:
+      "Loading notifications...",
+    notificationsError:
+      "Notifications could not be loaded.",
+    noNotifications:
+      "You have no notifications.",
+    viewAllNotifications:
+      "View all notifications",
+    userMenu:
+      "User menu",
+    user:
+      "User",
+    profile:
+      "My profile",
+    settings:
+      "Settings",
+    logout:
+      "Sign out",
+    language:
+      "Language",
+    languageMenu:
+      "Select language",
+    now:
+      "Now",
+    languageChanged:
+      "Language changed successfully.",
+  },
+
+  de: {
+    searchPlaceholder:
+      "Bestellungen, Produkte, Tische suchen...",
+    notifications:
+      "Benachrichtigungen",
+    unread:
+      "ungelesen",
+    loadingNotifications:
+      "Benachrichtigungen werden geladen...",
+    notificationsError:
+      "Benachrichtigungen konnten nicht geladen werden.",
+    noNotifications:
+      "Du hast keine Benachrichtigungen.",
+    viewAllNotifications:
+      "Alle Benachrichtigungen anzeigen",
+    userMenu:
+      "Benutzermenü",
+    user:
+      "Benutzer",
+    profile:
+      "Mein Profil",
+    settings:
+      "Einstellungen",
+    logout:
+      "Abmelden",
+    language:
+      "Sprache",
+    languageMenu:
+      "Sprache auswählen",
+    now:
+      "Jetzt",
+    languageChanged:
+      "Sprache erfolgreich geändert.",
+  },
+
+  fr: {
+    searchPlaceholder:
+      "Rechercher des commandes, produits, tables...",
+    notifications:
+      "Notifications",
+    unread:
+      "non lues",
+    loadingNotifications:
+      "Chargement des notifications...",
+    notificationsError:
+      "Impossible de charger les notifications.",
+    noNotifications:
+      "Vous n'avez aucune notification.",
+    viewAllNotifications:
+      "Voir toutes les notifications",
+    userMenu:
+      "Menu utilisateur",
+    user:
+      "Utilisateur",
+    profile:
+      "Mon profil",
+    settings:
+      "Paramètres",
+    logout:
+      "Se déconnecter",
+    language:
+      "Langue",
+    languageMenu:
+      "Sélectionner la langue",
+    now:
+      "Maintenant",
+    languageChanged:
+      "Langue modifiée avec succès.",
+  },
+
+  it: {
+    searchPlaceholder:
+      "Cerca ordini, prodotti, tavoli...",
+    notifications:
+      "Notifiche",
+    unread:
+      "non lette",
+    loadingNotifications:
+      "Caricamento notifiche...",
+    notificationsError:
+      "Impossibile caricare le notifiche.",
+    noNotifications:
+      "Non hai notifiche.",
+    viewAllNotifications:
+      "Visualizza tutte le notifiche",
+    userMenu:
+      "Menu utente",
+    user:
+      "Utente",
+    profile:
+      "Il mio profilo",
+    settings:
+      "Impostazioni",
+    logout:
+      "Disconnetti",
+    language:
+      "Lingua",
+    languageMenu:
+      "Seleziona lingua",
+    now:
+      "Adesso",
+    languageChanged:
+      "Lingua modificata con successo.",
+  },
+
+  pt: {
+    searchPlaceholder:
+      "Pesquisar pedidos, produtos, mesas...",
+    notifications:
+      "Notificações",
+    unread:
+      "não lidas",
+    loadingNotifications:
+      "A carregar notificações...",
+    notificationsError:
+      "Não foi possível carregar as notificações.",
+    noNotifications:
+      "Não tem notificações.",
+    viewAllNotifications:
+      "Ver todas as notificações",
+    userMenu:
+      "Menu do utilizador",
+    user:
+      "Utilizador",
+    profile:
+      "O meu perfil",
+    settings:
+      "Definições",
+    logout:
+      "Terminar sessão",
+    language:
+      "Idioma",
+    languageMenu:
+      "Selecionar idioma",
+    now:
+      "Agora",
+    languageChanged:
+      "Idioma alterado com sucesso.",
+  },
+};
+
 function formatRelativeTime(
-  value: string
+  value: string,
+  language: Language,
+  nowLabel: string
 ) {
   const date =
-    new Date(
-      value
-    );
+    new Date(value);
 
   if (
     Number.isNaN(
       date.getTime()
     )
   ) {
-    return '';
+    return "";
   }
 
   const seconds =
@@ -75,8 +334,22 @@ function formatRelativeTime(
     seconds <
     60
   ) {
-    return 'Ahora';
+    return nowLabel;
   }
+
+  const locale =
+    ADMIN_LANGUAGE_LOCALES[
+      language
+    ];
+
+  const relativeFormatter =
+    new Intl.RelativeTimeFormat(
+      locale,
+      {
+        numeric:
+          "always",
+      }
+    );
 
   const minutes =
     Math.floor(
@@ -88,7 +361,10 @@ function formatRelativeTime(
     minutes <
     60
   ) {
-    return `Hace ${minutes} min`;
+    return relativeFormatter.format(
+      -minutes,
+      "minute"
+    );
   }
 
   const hours =
@@ -101,7 +377,10 @@ function formatRelativeTime(
     hours <
     24
   ) {
-    return `Hace ${hours} h`;
+    return relativeFormatter.format(
+      -hours,
+      "hour"
+    );
   }
 
   const days =
@@ -111,27 +390,22 @@ function formatRelativeTime(
     );
 
   if (
-    days ===
-    1
-  ) {
-    return 'Hace 1 día';
-  }
-
-  if (
     days <
     7
   ) {
-    return `Hace ${days} días`;
+    return relativeFormatter.format(
+      -days,
+      "day"
+    );
   }
 
   return new Intl.DateTimeFormat(
-    'es-ES',
+    locale,
     {
       dateStyle:
-        'short',
-
+        "short",
       timeStyle:
-        'short',
+        "short",
     }
   ).format(
     date
@@ -144,20 +418,67 @@ export default function Topbar({
   const router =
     useRouter();
 
+  const languageRef =
+    useRef<HTMLDivElement>(
+      null
+    );
+
+  const notificationsRef =
+    useRef<HTMLDivElement>(
+      null
+    );
+
+  const profileRef =
+    useRef<HTMLDivElement>(
+      null
+    );
+
+  const reloadTimerRef =
+  useRef<number | null>(
+    null
+  );
+
   const user =
     useAdminAuthStore(
-      (
-        state
-      ) =>
+      (state) =>
         state.user
     );
 
   const clearSession =
     useAdminAuthStore(
-      (
-        state
-      ) =>
+      (state) =>
         state.clearSession
+    );
+
+  const language =
+    useAdminLanguageStore(
+      (state) =>
+        state.language
+    );
+
+  const setLanguage =
+    useAdminLanguageStore(
+      (state) =>
+        state.setLanguage
+    );
+
+  const messages =
+    MESSAGES[
+      language
+    ];
+
+  const currentLanguage =
+    useMemo(
+      () =>
+        ADMIN_LANGUAGES.find(
+          (option) =>
+            option.code ===
+            language
+        ) ??
+        ADMIN_LANGUAGES[0],
+      [
+        language,
+      ]
     );
 
   const [
@@ -177,11 +498,19 @@ export default function Topbar({
     );
 
   const [
+    showLanguages,
+    setShowLanguages,
+  ] =
+    useState(
+      false
+    );
+
+  const [
     searchQuery,
     setSearchQuery,
   ] =
     useState(
-      ''
+      ""
     );
 
   const [
@@ -207,8 +536,103 @@ export default function Topbar({
     setNotificationsError,
   ] =
     useState(
-      ''
+      ""
     );
+
+  useEffect(
+    () => {
+      document.documentElement.lang =
+        language;
+    },
+    [
+      language,
+    ]
+  );
+
+  useEffect(
+    () => {
+      function handlePointerDown(
+        event: PointerEvent
+      ) {
+        const target =
+          event.target;
+
+        if (
+          !(
+            target instanceof
+            Node
+          )
+        ) {
+          return;
+        }
+
+        if (
+          showLanguages &&
+          !languageRef.current?.contains(
+            target
+          )
+        ) {
+          setShowLanguages(
+            false
+          );
+        }
+
+        if (
+          showNotifications &&
+          !notificationsRef.current?.contains(
+            target
+          )
+        ) {
+          setShowNotifications(
+            false
+          );
+        }
+
+        if (
+          showProfile &&
+          !profileRef.current?.contains(
+            target
+          )
+        ) {
+          setShowProfile(
+            false
+          );
+        }
+      }
+
+      document.addEventListener(
+        "pointerdown",
+        handlePointerDown
+      );
+
+      return () => {
+        document.removeEventListener(
+          "pointerdown",
+          handlePointerDown
+        );
+      };
+    },
+    [
+      showLanguages,
+      showNotifications,
+      showProfile,
+    ]
+  );
+
+  useEffect(
+    () => {
+      return () => {
+        if (
+          reloadTimerRef.current
+        ) {
+          clearTimeout(
+            reloadTimerRef.current
+          );
+        }
+      };
+    },
+    []
+  );
 
   const loadNotifications =
     useCallback(
@@ -216,7 +640,7 @@ export default function Topbar({
         try {
           const response =
             await adminFetch(
-              '/api/notifications'
+              "/api/notifications"
             );
 
           const json =
@@ -227,8 +651,11 @@ export default function Topbar({
             !json.success
           ) {
             setNotificationsError(
-              json.error ||
-                'No se pudieron cargar las notificaciones.'
+              MESSAGES[
+                useAdminLanguageStore
+                  .getState()
+                  .language
+              ].notificationsError
             );
 
             return;
@@ -246,18 +673,22 @@ export default function Topbar({
           );
 
           setNotificationsError(
-            ''
+            ""
           );
         } catch (
           error
         ) {
           console.error(
-            'Error loading notifications:',
+            "Error loading notifications:",
             error
           );
 
           setNotificationsError(
-            'No se pudieron cargar las notificaciones.'
+            MESSAGES[
+              useAdminLanguageStore
+                .getState()
+                .language
+            ].notificationsError
           );
         } finally {
           setNotificationsLoading(
@@ -293,9 +724,7 @@ export default function Topbar({
 
   const unreadCount =
     notifications.filter(
-      (
-        notification
-      ) =>
+      (notification) =>
         notification.read !==
         true
     ).length;
@@ -305,6 +734,58 @@ export default function Topbar({
       0,
       5
     );
+
+  function changeLanguage(
+    nextLanguage: Language
+  ) {
+    if (
+      nextLanguage ===
+      language
+    ) {
+      setShowLanguages(
+        false
+      );
+
+      return;
+    }
+
+    setLanguage(
+      nextLanguage
+    );
+
+    document.documentElement.lang =
+      nextLanguage;
+
+    setShowLanguages(
+      false
+    );
+
+    setShowNotifications(
+      false
+    );
+
+    setShowProfile(
+      false
+    );
+
+    toast.success(
+      MESSAGES[
+        nextLanguage
+      ].languageChanged,
+      {
+        duration:
+          1200,
+      }
+    );
+
+    reloadTimerRef.current =
+      window.setTimeout(
+        () => {
+          window.location.reload();
+        },
+        650
+      );
+  }
 
   async function openNotification(
     notification: AdminNotification
@@ -323,11 +804,11 @@ export default function Topbar({
             `/api/notifications/${notification.id}`,
             {
               method:
-                'PUT',
+                "PUT",
 
               headers: {
-                'Content-Type':
-                  'application/json',
+                "Content-Type":
+                  "application/json",
               },
 
               body:
@@ -346,13 +827,9 @@ export default function Topbar({
           json.success
         ) {
           setNotifications(
-            (
-              current
-            ) =>
+            (current) =>
               current.map(
-                (
-                  item
-                ) =>
+                (item) =>
                   item.id ===
                   notification.id
                     ? {
@@ -368,7 +845,7 @@ export default function Topbar({
         error
       ) {
         console.error(
-          'Error marking notification as read:',
+          "Error marking notification as read:",
           error
         );
       }
@@ -385,7 +862,7 @@ export default function Topbar({
     );
 
     router.push(
-      '/admin/notifications'
+      "/admin/notifications"
     );
   }
 
@@ -395,7 +872,7 @@ export default function Topbar({
     );
 
     router.push(
-      '/admin/profile'
+      "/admin/profile"
     );
   }
 
@@ -405,7 +882,7 @@ export default function Topbar({
     );
 
     router.push(
-      '/admin/settings'
+      "/admin/settings"
     );
   }
 
@@ -418,15 +895,15 @@ export default function Topbar({
 
     if (
       typeof window !==
-      'undefined'
+      "undefined"
     ) {
       window.localStorage.removeItem(
-        'yamar-admin-auth'
+        "yamar-admin-auth"
       );
     }
 
     router.replace(
-      '/admin'
+      "/admin"
     );
 
     router.refresh();
@@ -434,27 +911,25 @@ export default function Topbar({
 
   return (
     <header
-      className={`fixed top-0 right-0 h-16 bg-white border-b border-gray-200 z-30 transition-all duration-300
-        ${
-          sidebarCollapsed
-            ? 'left-16'
-            : 'left-64'
-        }
-      `}
+      className={`fixed top-0 right-0 h-16 bg-white border-b border-gray-200 z-30 transition-all duration-300 ${
+        sidebarCollapsed
+          ? "left-16"
+          : "left-64"
+      }`}
     >
       <div className="h-full px-6 flex items-center justify-between">
         <div className="flex-1 max-w-xl">
           <div className="relative">
             <Search
-              size={
-                18
-              }
+              size={18}
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             />
 
             <input
               type="text"
-              placeholder="Buscar pedidos, productos, mesas..."
+              placeholder={
+                messages.searchPlaceholder
+              }
               value={
                 searchQuery
               }
@@ -462,9 +937,7 @@ export default function Topbar({
                 event
               ) =>
                 setSearchQuery(
-                  event
-                    .target
-                    .value
+                  event.target.value
                 )
               }
               className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder-gray-400"
@@ -472,8 +945,126 @@ export default function Topbar({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 ml-6">
-          <div className="relative">
+        <div className="flex items-center gap-2 sm:gap-3 ml-6">
+          <div
+            ref={
+              languageRef
+            }
+            className="relative"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setShowLanguages(
+                  !showLanguages
+                );
+
+                setShowNotifications(
+                  false
+                );
+
+                setShowProfile(
+                  false
+                );
+              }}
+              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100"
+              aria-label={
+                messages.languageMenu
+              }
+              aria-expanded={
+                showLanguages
+              }
+            >
+              <Globe2
+                size={19}
+                className="text-gray-600"
+              />
+
+              <span className="hidden sm:inline">
+                {
+                  currentLanguage.shortLabel
+                }
+              </span>
+
+              <ChevronDown
+                size={14}
+                className={`text-gray-400 transition-transform ${
+                  showLanguages
+                    ? "rotate-180"
+                    : ""
+                }`}
+              />
+            </button>
+
+            {showLanguages && (
+              <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    {
+                      messages.language
+                    }
+                  </p>
+                </div>
+
+                <div className="py-1">
+                  {ADMIN_LANGUAGES.map(
+                    (option) => {
+                      const selected =
+                        option.code ===
+                        language;
+
+                      return (
+                        <button
+                          key={
+                            option.code
+                          }
+                          type="button"
+                          onClick={() =>
+                            changeLanguage(
+                              option.code
+                            )
+                          }
+                          className={`flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
+                            selected
+                              ? "bg-indigo-50 text-indigo-700"
+                              : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="w-6 font-mono text-xs font-semibold uppercase text-gray-400">
+                              {
+                                option.shortLabel
+                              }
+                            </span>
+
+                            <span>
+                              {
+                                option.label
+                              }
+                            </span>
+                          </div>
+
+                          {selected && (
+                            <Check
+                              size={16}
+                              className="text-indigo-600"
+                            />
+                          )}
+                        </button>
+                      );
+                    }
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div
+            ref={
+              notificationsRef
+            }
+            className="relative"
+          >
             <button
               type="button"
               onClick={() => {
@@ -488,6 +1079,10 @@ export default function Topbar({
                   false
                 );
 
+                setShowLanguages(
+                  false
+                );
+
                 if (
                   next
                 ) {
@@ -495,15 +1090,15 @@ export default function Topbar({
                 }
               }}
               className="relative p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              aria-label="Notificaciones"
+              aria-label={
+                messages.notifications
+              }
               aria-expanded={
                 showNotifications
               }
             >
               <Bell
-                size={
-                  20
-                }
+                size={20}
                 className="text-gray-600"
               />
 
@@ -511,7 +1106,7 @@ export default function Topbar({
                 0 && (
                 <span
                   className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"
-                  aria-label={`${unreadCount} notificaciones sin leer`}
+                  aria-label={`${unreadCount} ${messages.unread}`}
                 />
               )}
             </button>
@@ -520,7 +1115,9 @@ export default function Topbar({
               <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
                   <h3 className="font-semibold text-gray-900">
-                    Notificaciones
+                    {
+                      messages.notifications
+                    }
                   </h3>
 
                   {unreadCount >
@@ -528,8 +1125,10 @@ export default function Topbar({
                     <span className="text-xs font-medium text-indigo-600">
                       {
                         unreadCount
-                      }{' '}
-                      sin leer
+                      }{" "}
+                      {
+                        messages.unread
+                      }
                     </span>
                   )}
                 </div>
@@ -537,7 +1136,9 @@ export default function Topbar({
                 <div className="max-h-80 overflow-y-auto">
                   {notificationsLoading && (
                     <div className="px-4 py-6 text-center text-sm text-gray-500">
-                      Cargando notificaciones...
+                      {
+                        messages.loadingNotifications
+                      }
                     </div>
                   )}
 
@@ -545,7 +1146,7 @@ export default function Topbar({
                     notificationsError && (
                     <div className="px-4 py-6 text-center text-sm text-red-600">
                       {
-                        notificationsError
+                        messages.notificationsError
                       }
                     </div>
                   )}
@@ -555,7 +1156,9 @@ export default function Topbar({
                     visibleNotifications.length ===
                       0 && (
                     <div className="px-4 py-6 text-center text-sm text-gray-500">
-                      No tienes notificaciones.
+                      {
+                        messages.noNotifications
+                      }
                     </div>
                   )}
 
@@ -578,8 +1181,8 @@ export default function Topbar({
                           className={`w-full px-4 py-3 text-left border-b border-gray-50 last:border-0 transition-colors hover:bg-gray-50 ${
                             notification.read ===
                             true
-                              ? 'bg-white'
-                              : 'bg-indigo-50/50'
+                              ? "bg-white"
+                              : "bg-indigo-50/50"
                           }`}
                         >
                           <div className="flex items-start gap-2">
@@ -606,7 +1209,9 @@ export default function Topbar({
 
                               <p className="mt-1 text-xs text-gray-500">
                                 {formatRelativeTime(
-                                  notification.createdAt
+                                  notification.createdAt,
+                                  language,
+                                  messages.now
                                 )}
                               </p>
                             </div>
@@ -624,14 +1229,21 @@ export default function Topbar({
                     }
                     className="text-sm text-indigo-600 hover:text-indigo-700 font-medium"
                   >
-                    Ver todas las notificaciones
+                    {
+                      messages.viewAllNotifications
+                    }
                   </button>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="relative">
+          <div
+            ref={
+              profileRef
+            }
+            className="relative"
+          >
             <button
               type="button"
               onClick={() => {
@@ -642,18 +1254,22 @@ export default function Topbar({
                 setShowNotifications(
                   false
                 );
+
+                setShowLanguages(
+                  false
+                );
               }}
               className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-              aria-label="Menú de usuario"
+              aria-label={
+                messages.userMenu
+              }
               aria-expanded={
                 showProfile
               }
             >
               <div className="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center">
                 <User
-                  size={
-                    16
-                  }
+                  size={16}
                   className="text-indigo-600"
                 />
               </div>
@@ -661,23 +1277,21 @@ export default function Topbar({
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-gray-900">
                   {user?.name ??
-                    'Usuario'}
+                    messages.user}
                 </p>
 
                 <p className="text-xs text-gray-500">
                   {user?.email ??
-                    ''}
+                    ""}
                 </p>
               </div>
 
               <ChevronDown
-                size={
-                  16
-                }
+                size={16}
                 className={`text-gray-400 transition-transform ${
                   showProfile
-                    ? 'rotate-180'
-                    : ''
+                    ? "rotate-180"
+                    : ""
                 }`}
               />
             </button>
@@ -693,13 +1307,13 @@ export default function Topbar({
                     className="w-full px-4 py-2 flex items-center gap-3 text-left text-gray-700 hover:bg-gray-50"
                   >
                     <User
-                      size={
-                        16
-                      }
+                      size={16}
                     />
 
                     <span className="text-sm">
-                      Mi perfil
+                      {
+                        messages.profile
+                      }
                     </span>
                   </button>
 
@@ -711,13 +1325,13 @@ export default function Topbar({
                     className="w-full px-4 py-2 flex items-center gap-3 text-left text-gray-700 hover:bg-gray-50"
                   >
                     <Settings
-                      size={
-                        16
-                      }
+                      size={16}
                     />
 
                     <span className="text-sm">
-                      Configuración
+                      {
+                        messages.settings
+                      }
                     </span>
                   </button>
 
@@ -731,13 +1345,13 @@ export default function Topbar({
                     className="w-full px-4 py-2 flex items-center gap-3 text-left text-red-600 hover:bg-red-50"
                   >
                     <LogOut
-                      size={
-                        16
-                      }
+                      size={16}
                     />
 
                     <span className="text-sm">
-                      Cerrar sesión
+                      {
+                        messages.logout
+                      }
                     </span>
                   </button>
                 </div>
