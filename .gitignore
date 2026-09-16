@@ -20,3 +20,15 @@ coverage/
 
 # Legacy/generated
 /generated/prisma
+# Android release signing secrets
+*.jks
+*.keystore
+*.p12
+*.pfx
+key.properties
+keystore.properties
+
+# iOS generated files and signing profiles
+Pods/
+DerivedData/
+*.mobileprovision

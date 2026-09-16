@@ -1,0 +1,101 @@
+apply plugin: 'com.android.application'
+
+def yamarKeystorePath = System.getenv('YAMAR_KEYSTORE_PATH')
+def yamarKeystorePassword = System.getenv('YAMAR_KEYSTORE_PASSWORD')
+def yamarKeyAlias = System.getenv('YAMAR_KEY_ALIAS')
+def yamarKeyPassword = System.getenv('YAMAR_KEY_PASSWORD')
+
+def yamarReleaseSigningConfigured =
+        yamarKeystorePath &&
+        yamarKeystorePassword &&
+        yamarKeyAlias &&
+        yamarKeyPassword
+
+android {
+    namespace = "com.yamar.app"
+    compileSdk = rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        applicationId "com.yamar.app"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        aaptOptions {
+            // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (yamarReleaseSigningConfigured) {
+                storeFile file(yamarKeystorePath)
+                storePassword yamarKeystorePassword
+                keyAlias yamarKeyAlias
+                keyPassword yamarKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+gradle.taskGraph.whenReady { taskGraph ->
+    def releaseRequested = taskGraph.allTasks.any { task ->
+        def taskName = task.name.toLowerCase()
+
+        taskName.contains('release') &&
+                (
+                        taskName.contains('assemble') ||
+                        taskName.contains('bundle') ||
+                        taskName.contains('package')
+                )
+    }
+
+    if (releaseRequested && !yamarReleaseSigningConfigured) {
+        throw new GradleException(
+                'YaMar release signing is not configured. ' +
+                'Define YAMAR_KEYSTORE_PATH, YAMAR_KEYSTORE_PASSWORD, ' +
+                'YAMAR_KEY_ALIAS and YAMAR_KEY_PASSWORD before building a release.'
+        )
+    }
+}
+
+repositories {
+    flatDir {
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch (Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
