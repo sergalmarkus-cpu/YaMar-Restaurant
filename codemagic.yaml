@@ -1,6 +1,6 @@
 ﻿workflows:
-  ios-generation-check:
-    name: YaMar iOS - Generation Check
+  ios-unsigned-build-check:
+    name: YaMar iOS - Unsigned Build Check
     instance_type: mac_mini_m2
     max_build_duration: 30
 
@@ -46,10 +46,12 @@
       - name: Verify iOS pre-generation state
         script: |
           set -e
+
           if [ -d "ios" ]; then
             echo "ERROR: ios directory already exists before generation."
             exit 1
           fi
+
           echo "OK: ios directory is absent before generation."
 
       - name: Generate iOS project
@@ -61,28 +63,12 @@
         script: |
           set -e
 
-          if [ ! -d "ios" ]; then
-            echo "ERROR: ios directory was not generated."
-            exit 1
-          fi
-
-          if [ ! -d "ios/App" ]; then
-            echo "ERROR: ios/App directory was not generated."
-            exit 1
-          fi
-
           if [ ! -d "ios/App/App.xcodeproj" ]; then
-            echo "ERROR: App.xcodeproj was not generated."
+            echo "ERROR: ios/App/App.xcodeproj was not generated."
             exit 1
           fi
 
-          echo "OK: ios directory generated."
-          echo "OK: ios/App generated."
           echo "OK: ios/App/App.xcodeproj generated."
-
-          echo ""
-          echo "===== Generated iOS structure ====="
-          find ios -maxdepth 3 -print | sort
 
       - name: Inspect Xcode project
         script: |
@@ -90,28 +76,86 @@
 
           cd ios/App
 
-          echo "===== Xcode project information ====="
           xcodebuild \
             -project App.xcodeproj \
             -list
 
           echo ""
-          echo "===== Xcode build settings ====="
+          echo "===== Effective build settings ====="
+
           xcodebuild \
             -project App.xcodeproj \
             -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
             -showBuildSettings \
             CODE_SIGNING_ALLOWED=NO \
-            | grep -E "PRODUCT_BUNDLE_IDENTIFIER|IPHONEOS_DEPLOYMENT_TARGET|PRODUCT_NAME" \
-            | head -20
+            CODE_SIGNING_REQUIRED=NO \
+            | grep -E "PRODUCT_BUNDLE_IDENTIFIER|IPHONEOS_DEPLOYMENT_TARGET|PRODUCT_NAME|SDKROOT" \
+            | head -30
+
+      - name: Build iOS simulator without signing
+        script: |
+          set -euo pipefail
+
+          cd ios/App
+
+          echo "===== Starting unsigned iOS simulator build ====="
+
+          rm -rf "$CM_BUILD_DIR/ios-derived-data"
+
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$CM_BUILD_DIR/ios-derived-data" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+
+          echo ""
+          echo "===== Unsigned iOS simulator build completed ====="
+
+      - name: Verify compiled app
+        script: |
+          set -e
+
+          APP_PATH="$CM_BUILD_DIR/ios-derived-data/Build/Products/Debug-iphonesimulator/App.app"
+
+          echo "Expected app path:"
+          echo "$APP_PATH"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "ERROR: compiled App.app was not found."
+            exit 1
+          fi
+
+          echo ""
+          echo "OK: compiled App.app exists."
+
+          echo ""
+          echo "===== Compiled application ====="
+          ls -lah "$APP_PATH"
+
+          echo ""
+          echo "===== Bundle metadata ====="
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleIdentifier" \
+            "$APP_PATH/Info.plist"
+
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleExecutable" \
+            "$APP_PATH/Info.plist"
 
       - name: Verify repository mutation scope
         script: |
           set -e
 
-          echo "===== Git status after generation ====="
+          echo "===== Git status after generation and build ====="
           git status --short
 
           echo ""
-          echo "Generation diagnostic completed successfully."
-          echo "No signing, archive, publishing, or App Store upload was performed."
+          echo "Unsigned simulator build diagnostic completed successfully."
+          echo "No archive, signing, provisioning, IPA export, or App Store upload was performed."
