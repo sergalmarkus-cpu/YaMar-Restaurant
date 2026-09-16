@@ -1,6 +1,6 @@
 ﻿workflows:
-  ios-environment-check:
-    name: YaMar iOS - Environment Check
+  ios-generation-check:
+    name: YaMar iOS - Generation Check
     instance_type: mac_mini_m2
     max_build_duration: 30
 
@@ -41,13 +41,77 @@
           set -e
           npx cap --version
           npm ls @capacitor/core @capacitor/cli @capacitor/android @capacitor/ios --depth=0
+          npx cap config
 
       - name: Verify iOS pre-generation state
         script: |
           set -e
           if [ -d "ios" ]; then
-            echo "ERROR: ios directory already exists before the generation phase."
+            echo "ERROR: ios directory already exists before generation."
             exit 1
           fi
-          echo "OK: ios directory is intentionally absent."
-          echo "Environment diagnostic completed successfully."
+          echo "OK: ios directory is absent before generation."
+
+      - name: Generate iOS project
+        script: |
+          set -e
+          npx cap add ios
+
+      - name: Verify generated iOS project
+        script: |
+          set -e
+
+          if [ ! -d "ios" ]; then
+            echo "ERROR: ios directory was not generated."
+            exit 1
+          fi
+
+          if [ ! -d "ios/App" ]; then
+            echo "ERROR: ios/App directory was not generated."
+            exit 1
+          fi
+
+          if [ ! -d "ios/App/App.xcodeproj" ]; then
+            echo "ERROR: App.xcodeproj was not generated."
+            exit 1
+          fi
+
+          echo "OK: ios directory generated."
+          echo "OK: ios/App generated."
+          echo "OK: ios/App/App.xcodeproj generated."
+
+          echo ""
+          echo "===== Generated iOS structure ====="
+          find ios -maxdepth 3 -print | sort
+
+      - name: Inspect Xcode project
+        script: |
+          set -e
+
+          cd ios/App
+
+          echo "===== Xcode project information ====="
+          xcodebuild \
+            -project App.xcodeproj \
+            -list
+
+          echo ""
+          echo "===== Xcode build settings ====="
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -showBuildSettings \
+            CODE_SIGNING_ALLOWED=NO \
+            | grep -E "PRODUCT_BUNDLE_IDENTIFIER|IPHONEOS_DEPLOYMENT_TARGET|PRODUCT_NAME" \
+            | head -20
+
+      - name: Verify repository mutation scope
+        script: |
+          set -e
+
+          echo "===== Git status after generation ====="
+          git status --short
+
+          echo ""
+          echo "Generation diagnostic completed successfully."
+          echo "No signing, archive, publishing, or App Store upload was performed."
