@@ -1,0 +1,53 @@
+﻿workflows:
+  ios-environment-check:
+    name: YaMar iOS - Environment Check
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+
+    environment:
+      node: latest
+      xcode: latest
+      cocoapods: default
+
+    scripts:
+      - name: Verify repository state
+        script: |
+          set -e
+          echo "Branch: $CM_BRANCH"
+          echo "Commit: $(git rev-parse --short HEAD)"
+          git status --short
+
+      - name: Verify macOS and Xcode
+        script: |
+          set -e
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Verify Node and npm
+        script: |
+          set -e
+          node --version
+          npm --version
+
+      - name: Install project dependencies
+        script: |
+          set -e
+          npm ci
+
+      - name: Verify Capacitor
+        script: |
+          set -e
+          npx cap --version
+          npm ls @capacitor/core @capacitor/cli @capacitor/android @capacitor/ios --depth=0
+
+      - name: Verify iOS pre-generation state
+        script: |
+          set -e
+          if [ -d "ios" ]; then
+            echo "ERROR: ios directory already exists before the generation phase."
+            exit 1
+          fi
+          echo "OK: ios directory is intentionally absent."
+          echo "Environment diagnostic completed successfully."
